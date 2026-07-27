@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoveResto — Démo Interactive</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#081522;color:#fff;overflow:hidden;height:100vh;display:flex}
+.sidebar{width:200px;background:#0D2137;display:flex;flex-direction:column;border-right:1px solid #1A3A52;flex-shrink:0;height:100vh}
+.logo{padding:16px 18px;border-bottom:1px solid #1A3A52}
+.logo-txt{font-size:20px;font-weight:800}
+.logo-txt span{color:#00C48C}
+.logo-sub{font-size:10px;color:#3A5570;margin-top:2px}
+.nav-section{padding:8px 18px 4px;font-size:10px;color:#3A5570;text-transform:uppercase;letter-spacing:1px;margin-top:6px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:10px 18px;color:#6A8FAB;font-size:12.5px;cursor:pointer;border-left:3px solid transparent;transition:all .15s;position:relative}
+.nav-item:hover{color:#fff;background:#0F2D4060}
+.nav-item.active{color:#fff;background:#0F2D40;border-left-color:#00C48C;font-weight:600}
+.nav-ico{font-size:15px;width:20px;text-align:center}
+.nav-badge{margin-left:auto;background:#E84545;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700}
+.sidebar-foot{margin-top:auto;padding:12px 18px;border-top:1px solid #1A3A52;font-size:10px;color:#3A5570;line-height:1.7}
+.sidebar-foot b{color:#00C48C}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;height:100vh}
+.topbar{background:#0D2137;border-bottom:1px solid #1A3A52;padding:0 20px;height:50px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.page-title{font-size:15px;font-weight:700}
+.topbar-r{display:flex;align-items:center;gap:10px}
+.rest-badge{background:#0F2D40;border:1px solid #1A3A52;border-radius:6px;padding:4px 10px;font-size:11.5px;color:#8BAABF}
+.rest-badge b{color:#fff}
+.alert-pill{background:#E8454520;border:1px solid #E84545;color:#E84545;border-radius:6px;padding:4px 10px;font-size:11.5px;font-weight:700;cursor:pointer}
+.avatar{width:30px;height:30px;border-radius:50%;background:#00C48C;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#0D2137}
+.content{flex:1;overflow-y:auto;padding:18px 22px;background:#0A1A27}
+.content::-webkit-scrollbar{width:4px}
+.content::-webkit-scrollbar-thumb{background:#1A3A52;border-radius:2px}
+.screen{display:none}
+.screen.active{display:block}
+.statusbar{background:#081522;border-top:1px solid #1A3A52;padding:4px 22px;display:flex;gap:16px;align-items:center;height:26px;flex-shrink:0;font-size:10.5px;color:#3A5570}
+.sdot{width:6px;height:6px;border-radius:50%;background:#00C48C;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.g21{display:grid;grid-template-columns:1fr 280px;gap:12px;margin-bottom:14px}
+.card{background:#0F2D40;border:1px solid #1A3A52;border-radius:11px;padding:16px}
+.ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}
+.ct{font-size:12.5px;font-weight:700}
+.cs{font-size:11px;color:#6A8FAB}
+.kpi{background:#0F2D40;border:1px solid #1A3A52;border-radius:11px;padding:14px;position:relative;overflow:hidden}
+.kpi-top{position:absolute;top:0;left:0;right:0;height:3px;border-radius:3px 3px 0 0}
+.kpi-ico{position:absolute;top:12px;right:12px;font-size:20px;opacity:.3}
+.kpi-lbl{font-size:10px;color:#6A8FAB;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.kpi-val{font-size:20px;font-weight:800;margin-bottom:5px}
+.delta{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:15px;display:inline-block}
+.delta.up{background:#00C48C20;color:#00C48C}
+.delta.dn{background:#E8454520;color:#E84545}
+.delta.nu{background:#3B82F620;color:#3B82F6}
+.delta.wa{background:#F5A62320;color:#F5A623}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{padding:7px 10px;text-align:left;color:#6A8FAB;font-weight:600;font-size:10.5px;border-bottom:1px solid #1A3A52;text-transform:uppercase;letter-spacing:.4px}
+td{padding:9px 10px;border-bottom:1px solid #1A3A5212;color:#fff;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.bdg{font-size:10px;font-weight:700;padding:2px 8px;border-radius:15px;display:inline-block}
+.pbar{height:5px;background:#1A3A52;border-radius:3px;overflow:hidden}
+.pfill{height:100%;border-radius:3px}
+.alert-c{border-radius:8px;padding:10px;margin-bottom:7px;display:flex;gap:9px;border-left:3px solid}
+.fc-row{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;margin-bottom:5px}
+.rev{background:#0A1A27;border-radius:8px;padding:11px;margin-bottom:8px}
+.tier-c{border-radius:9px;padding:12px;margin-bottom:9px;display:flex;gap:12px;align-items:flex-start}
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-txt">Nover<span>Resto</span></div>
+    <div class="logo-sub">Burger House — Lac Tunis</div>
+  </div>
+  <div class="nav-section">Principal</div>
+  <div class="nav-item active" onclick="nav('dashboard',this)"><span class="nav-ico">📊</span> Dashboard</div>
+  <div class="nav-item" onclick="nav('forecasts',this)"><span class="nav-ico">🧠</span> Prévisions IA</div>
+  <div class="nav-item" onclick="nav('stocks',this)"><span class="nav-ico">📦</span> Stocks <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('orders',this)"><span class="nav-ico">🛒</span> Commandes <span class="nav-badge">4</span></div>
+  <div class="nav-item" onclick="nav('reports',this)"><span class="nav-ico">📄</span> Rapports</div>
+  <div class="nav-section">Croissance</div>
+  <div class="nav-item" onclick="nav('reputation',this)"><span class="nav-ico">⭐</span> Réputation</div>
+  <div class="nav-item" onclick="nav('social',this)"><span class="nav-ico">📲</span> Social Media</div>
+  <div class="nav-item" onclick="nav('fidelisation',this)"><span class="nav-ico">♥</span> Fidélisation</div>
+  <div class="sidebar-foot">
+    <b>NoveResto</b> v1.0.0<br>
+    Démo interactive<br>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="page-title" id="ptitle">📊 Tableau de bord</div>
+    <div class="topbar-r">
+      <div class="rest-badge">🏪 <b>Burger House</b> — Lac Tunis</div>
+      <div id="topdate" style="font-size:11.5px;color:#6A8FAB"></div>
+      <div class="alert-pill" onclick="nav('stocks',document.querySelector('.nav-item:nth-child(5)'))">🔔 3 alertes</div>
+      <div class="avatar">KB</div>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="screen active" id="s-dashboard">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">💰</div><div class="kpi-lbl">CA Aujourd'hui</div><div class="kpi-val">12 480 TND</div><span class="delta up">↑ +8.4% vs hier</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#3B82F6"></div><div class="kpi-ico">👥</div><div class="kpi-lbl">Couverts</div><div class="kpi-val">247</div><span class="delta up">↑ +12%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">📊</div><div class="kpi-lbl">Food Cost</div><div class="kpi-val">31.2%</div><span class="delta up">↓ −2.1 pts</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">🧾</div><div class="kpi-lbl">Ticket Moyen</div><div class="kpi-val">50.5 TND</div><span class="delta up">↑ +3.7%</span></div>
+      </div>
+      <div class="g21">
+        <div class="card">
+          <div class="ch"><div class="ct">CA — Semaine en cours</div><div style="display:flex;gap:12px;font-size:10.5px;color:#6A8FAB"><span>🟢 Réalisé</span><span>🟡 Prévu</span></div></div>
+          <div style="display:flex;align-items:flex-end;gap:7px;height:100px;padding-top:6px">
+            <script>
+            var chart=[{d:'Lun',r:9800,p:10200},{d:'Mar',r:11200,p:11500},{d:'Mer',r:10500,p:10800},{d:'Jeu',r:12100,p:12400},{d:'Ven',r:13800,p:13500},{d:'Sam',r:14200,p:14000},{d:'Dim',r:12480,p:12800}];
+            var mx=14200;
+            chart.forEach(function(b){
+              document.write('<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">');
+              document.write('<div style="font-size:9px;color:#5A7A8A">'+(b.r/1000).toFixed(1)+'k</div>');
+              document.write('<div style="display:flex;gap:2px;align-items:flex-end;height:80px">');
+              document.write('<div style="width:16px;height:'+Math.round(b.r/mx*75)+'px;background:#00C48C;border-radius:2px 2px 0 0;min-height:2px"></div>');
+              document.write('<div style="width:12px;height:'+Math.round(b.p/mx*75)+'px;background:#F5A623;opacity:.6;border-radius:2px 2px 0 0;min-height:2px"></div>');
+              document.write('</div><div style="font-size:9.5px;color:#3A6080">'+b.d+'</div></div>');
+            });
+            </script>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">🔔 Alertes actives</div><div class="cs">4 en cours</div></div>
+          <div class="alert-c critical" style="background:#E8454512;border-left-color:#E84545"><div style="width:7px;height:7px;border-radius:50%;background:#E84545;margin-top:3px;flex-shrink:0"></div><div><div style="font-size:11.5px;font-weight:700">Rupture : Bœuf haché</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">1.2 kg restant — seuil 5 kg</div><span class="bdg" style="background:#E8454520;color:#E84545;margin-top:4px">CRITIQUE</span></div></div>
+          <div class="alert-c" style="background:#F5A62312;border-left-color:#F5A623"><div style="width:7px;height:7px;border-radius:50%;background:#F5A623;margin-top:3px;flex-shrink:0"></div><div><div style="font-size:11.5px;font-weight:700">DLC 36h : Poulet filet</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">4.5 kg — expire le 16 Jan</div><span class="bdg" style="background:#F5A62320;color:#F5A623;margin-top:4px">ATTENTION</span></div></div>
+          <div class="alert-c" style="background:#F5A62312;border-left-color:#F5A623"><div style="width:7px;height:7px;border-radius:50%;background:#F5A623;margin-top:3px;flex-shrink:0"></div><div><div style="font-size:11.5px;font-weight:700">Food Cost dérivé +3.2 pts</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">31.2% vs objectif 28%</div><span class="bdg" style="background:#F5A62320;color:#F5A623;margin-top:4px">ATTENTION</span></div></div>
+          <div class="alert-c" style="background:#3B82F612;border-left-color:#3B82F6"><div style="width:7px;height:7px;border-radius:50%;background:#3B82F6;margin-top:3px;flex-shrink:0"></div><div><div style="font-size:11.5px;font-weight:700">Commande auto prête</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">Metro TN · 8 articles · 1 840 TND</div><span class="bdg" style="background:#3B82F620;color:#3B82F6;margin-top:4px">INFO</span></div></div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">📦 Stocks rapides</div><div class="cs">Valorisation : 4 280 TND</div></div>
+          <script>
+          var stocks=[{n:'Bœuf haché halal',q:'1.2 kg',s:'RUPTURE',p:8,c:'#E84545'},{n:'Pain burger',q:'48 pcs',s:'CRITIQUE',p:22,c:'#F5A623'},{n:'Poulet filet',q:'4.5 kg',s:'DLC_ALERT',p:35,c:'#F5A623'},{n:'Frites surgelées',q:'12 kg',s:'OK',p:60,c:'#00C48C'},{n:'Ketchup Heinz',q:'3 pcs',s:'OK',p:75,c:'#00C48C'}];
+          stocks.forEach(function(s){
+            document.write('<div style="display:flex;align-items:center;gap:7px;padding:8px 0;border-bottom:1px solid #1A3A5215">');
+            document.write('<div style="flex:1;font-size:11.5px">'+s.n+'</div>');
+            document.write('<div style="font-size:11.5px;color:'+s.c+';font-weight:700;width:62px;text-align:right">'+s.q+'</div>');
+            document.write('<div style="width:60px"><div class="pbar"><div class="pfill" style="width:'+s.p+'%;background:'+s.c+'"></div></div></div>');
+            document.write('<span class="bdg" style="background:'+s.c+'20;color:'+s.c+';width:68px;text-align:center">'+s.s+'</span>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">📈 Prévisions J+7</div><div class="cs">Prophet v1 · 93.7%</div></div>
+          <script>
+          var fc=[{d:'Mar 16',r:13200,c:262,t:true},{d:'Mer 17',r:11800,c:234},{d:'Jeu 18',r:12400,c:246},{d:'Ven 19',r:14800,c:295},{d:'Sam 20',r:15400,c:308}];
+          var mxf=15400;
+          fc.forEach(function(f){
+            document.write('<div class="fc-row" style="background:'+(f.t?'#00C48C15':'#0A1A27')+';border:'+(f.t?'1px solid #00C48C30':'none')+'">');
+            document.write('<div style="font-size:11px;color:'+(f.t?'#00C48C':'#8BAABF')+';font-weight:'+(f.t?700:400)+';width:70px">'+(f.t?'▶ ':'')+f.d+'</div>');
+            document.write('<div style="flex:1"><div class="pbar"><div class="pfill" style="width:'+Math.round(f.r/mxf*100)+'%;background:'+(f.t?'#00C48C':'#3B82F6')+'"></div></div></div>');
+            document.write('<div style="font-size:12px;font-weight:700;color:'+(f.t?'#00C48C':'#fff')+';width:80px;text-align:right">'+(f.r/1000).toFixed(1)+'k TND</div>');
+            document.write('<div style="font-size:10.5px;color:#6A8FAB;width:48px;text-align:right">'+f.c+' cvts</div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <!-- FORECASTS -->
+    <div class="screen" id="s-forecasts">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">🧠</div><div class="kpi-lbl">CA prévu demain</div><div class="kpi-val">13 200 TND</div><span class="delta up">↑ +6.0%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#3B82F6"></div><div class="kpi-ico">👥</div><div class="kpi-lbl">Couverts prévus</div><div class="kpi-val">262</div><span class="delta up">↑ +9.2%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">🎯</div><div class="kpi-lbl">Précision IA</div><div class="kpi-val">93.7%</div><span class="delta nu">MAPE 6.3%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#8B5CF6"></div><div class="kpi-ico">📅</div><div class="kpi-lbl">Horizon</div><div class="kpi-val">J+14</div><span class="delta nu">Prophet v1</span></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">📈 Prévisions J+7</div></div>
+          <script>
+          [['Mar 16',13200,262,true],['Mer 17',11800,234],['Jeu 18',12400,246],['Ven 19',14800,295],['Sam 20',15400,308],['Dim 21',13600,272],['Lun 22',10500,208]].forEach(function(f){
+            var isT=f[3];
+            document.write('<div class="fc-row" style="background:'+(isT?'#00C48C15':'#0A1A27')+';border:'+(isT?'1px solid #00C48C30':'none')+'">');
+            document.write('<div style="font-size:11px;color:'+(isT?'#00C48C':'#8BAABF')+';font-weight:'+(isT?700:400)+';width:70px">'+(isT?'▶ ':'')+f[0]+'</div>');
+            document.write('<div style="flex:1"><div class="pbar"><div class="pfill" style="width:'+Math.round(f[1]/15400*100)+'%;background:'+(isT?'#00C48C':'#3B82F6')+'"></div></div></div>');
+            document.write('<div style="font-size:12px;font-weight:700;color:'+(isT?'#00C48C':'#fff')+';width:80px;text-align:right">'+(f[1]/1000).toFixed(1)+'k TND</div>');
+            document.write('<div style="font-size:10.5px;color:#6A8FAB;width:48px;text-align:right">'+f[2]+' cvts</div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">🌙 Mode Ramadan</div></div>
+          <div style="padding:12px;background:#0A1A27;border-radius:8px;margin-bottom:10px">
+            <div style="font-size:11px;color:#F5A623;font-weight:700;margin-bottom:6px">Ramadan 2025 : 1 Mar → 30 Mar</div>
+            <div style="font-size:11px;color:#8BAABF">Stories Iftar à 18h45 automatiques</div>
+            <div style="font-size:11px;color:#8BAABF">Posts Sahour à 2h30</div>
+            <div style="font-size:11px;color:#8BAABF">Hashtags #IftarBurger #RamadanTunis</div>
+          </div>
+          <div class="ch"><div class="ct">🥩 Besoins ingrédients demain</div></div>
+          <table>
+            <tr><th>Article</th><th>Besoin</th><th>Stock</th><th>Action</th></tr>
+            <tr><td style="color:#fff">Bœuf haché</td><td style="color:#8BAABF">8.5 kg</td><td style="color:#E84545;font-weight:700">1.2 kg</td><td><span class="bdg" style="background:#E8454520;color:#E84545">COMMANDER</span></td></tr>
+            <tr><td style="color:#fff">Pain burger</td><td style="color:#8BAABF">262 pcs</td><td style="color:#F5A623;font-weight:700">48 pcs</td><td><span class="bdg" style="background:#F5A62320;color:#F5A623">COMMANDER</span></td></tr>
+            <tr><td style="color:#fff">Poulet filet</td><td style="color:#8BAABF">3.2 kg</td><td style="color:#00C48C;font-weight:700">4.5 kg</td><td><span class="bdg" style="background:#00C48C20;color:#00C48C">OK</span></td></tr>
+            <tr><td style="color:#fff">Frites</td><td style="color:#8BAABF">9.0 kg</td><td style="color:#00C48C;font-weight:700">12 kg</td><td><span class="bdg" style="background:#00C48C20;color:#00C48C">OK</span></td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOCKS -->
+    <div class="screen" id="s-stocks">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">💎</div><div class="kpi-lbl">Valeur stock</div><div class="kpi-val">4 280 TND</div><span class="delta dn">↓ −3.2%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#E84545"></div><div class="kpi-ico">⚡</div><div class="kpi-lbl">Critiques</div><div class="kpi-val">3</div><span class="delta dn">↑ +2</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">📅</div><div class="kpi-lbl">DLC imminentes</div><div class="kpi-val">1</div><span class="delta wa">< 48h</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">✅</div><div class="kpi-lbl">Articles OK</div><div class="kpi-val">4</div><span class="delta up">Seuils OK</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="ch"><div class="ct">📦 Inventaire complet</div><div class="cs">Mis à jour il y a 2h</div></div>
+        <table>
+          <tr><th>Article</th><th>Catégorie</th><th>Qté</th><th>Seuil</th><th style="width:110px">Niveau</th><th>Statut</th></tr>
+          <script>
+          [{n:'Bœuf haché halal',cat:'Viande',q:'1.2 kg',s:'5 kg',p:8,c:'#E84545',st:'RUPTURE'},
+           {n:'Pain burger sésame',cat:'Boulangerie',q:'48 pcs',s:'50 pcs',p:22,c:'#F5A623',st:'CRITIQUE'},
+           {n:'Poulet filet',cat:'Viande',q:'4.5 kg',s:'3 kg',p:35,c:'#F5A623',st:'DLC_ALERT'},
+           {n:'Frites surgelées',cat:'Épicerie',q:'12 kg',s:'8 kg',p:60,c:'#00C48C',st:'OK'},
+           {n:'Ketchup Heinz',cat:'Sauces',q:'3 pcs',s:'2 pcs',p:75,c:'#00C48C',st:'OK'},
+           {n:'Coca-Cola 33cl',cat:'Boissons',q:'8 caisses',s:'5',p:80,c:'#00C48C',st:'OK'},
+           {n:'Huile de friture',cat:'Épicerie',q:'18 L',s:'10 L',p:90,c:'#00C48C',st:'OK'}
+          ].forEach(function(r){
+            document.write('<tr><td style="color:#fff;font-weight:'+(r.p<30?700:400)+'">'+r.n+'</td><td style="color:#6A8FAB">'+r.cat+'</td><td style="color:'+r.c+';font-weight:700">'+r.q+'</td><td style="color:#6A8FAB">'+r.s+'</td><td><div class="pbar"><div class="pfill" style="width:'+r.p+'%;background:'+r.c+'"></div></div></td><td><span class="bdg" style="background:'+r.c+'20;color:'+r.c+'">'+r.st+'</span></td></tr>');
+          });
+          </script>
+        </table>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">📊 Food Cost temps réel</div></div>
+          <div style="text-align:center;padding:14px 0">
+            <div style="font-size:46px;font-weight:800;color:#00C48C">31.2%</div>
+            <div style="font-size:12px;color:#6A8FAB;margin:7px 0">Objectif : 32%</div>
+            <span class="delta up">✅ −0.8 pts sous l'objectif</span>
+          </div>
+          <div style="font-size:12px">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1A3A5215"><span style="color:#6A8FAB">Achats semaine</span><span>3 840 TND</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1A3A5215"><span style="color:#6A8FAB">CA semaine</span><span>12 310 TND</span></div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:#6A8FAB">Marge brute</span><span style="color:#00C48C;font-weight:700">68.8%</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">📋 Mouvements récents</div></div>
+          <script>
+          [{n:'Bœuf haché',t:'SORTIE',q:'−3.8 kg',h:'23h45',c:'#3B82F6'},
+           {n:'Pain burger',t:'SORTIE',q:'−89 pcs',h:'23h45',c:'#3B82F6'},
+           {n:'Poulet filet',t:'RÉCEPTION',q:'+8.0 kg',h:'10h30',c:'#27AE60'},
+           {n:'Frites',t:'SORTIE',q:'−5.5 kg',h:'23h45',c:'#3B82F6'}
+          ].forEach(function(m){
+            document.write('<div style="display:flex;align-items:center;gap:7px;padding:8px 0;border-bottom:1px solid #1A3A5215;font-size:11.5px">');
+            document.write('<div style="flex:1">'+m.n+'</div>');
+            document.write('<span class="bdg" style="background:'+m.c+'20;color:'+m.c+'">'+m.t+'</span>');
+            document.write('<div style="color:'+m.c+';font-weight:700;width:52px;text-align:right">'+m.q+'</div>');
+            document.write('<div style="color:#6A8FAB;width:36px;text-align:right">'+m.h+'</div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDERS -->
+    <div class="screen" id="s-orders">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">📋</div><div class="kpi-lbl">En attente</div><div class="kpi-val">4</div><span class="delta wa">À valider</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">💰</div><div class="kpi-lbl">Total à valider</div><div class="kpi-val">1 840 TND</div><span class="delta up">Auto IA</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">✅</div><div class="kpi-lbl">Livrées ce mois</div><div class="kpi-val">12</div><span class="delta up">Conformité 97%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#3B82F6"></div><div class="kpi-ico">🏭</div><div class="kpi-lbl">Fournisseurs</div><div class="kpi-val">4</div><span class="delta nu">Tunisie</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="ch"><div class="ct">🛒 Bons de commande</div><div class="cs">Générés automatiquement par l'IA</div></div>
+        <table>
+          <tr><th>N° Cmd</th><th>Fournisseur</th><th>Articles</th><th>Total TND</th><th>Livraison</th><th>Statut</th><th>Action</th></tr>
+          <script>
+          [{id:'ORD-001',s:'Metro Tunisie',it:6,t:1240,d:'J+1',st:'DRAFT',sc:'#3B82F6',sl:'EN ATTENTE'},
+           {id:'ORD-002',s:'Délice Holding',it:2,t:380,d:'J+2',st:'SENT',sc:'#F5A623',sl:'ENVOYÉ'},
+           {id:'ORD-003',s:'Bonpain',it:3,t:220,d:'Livré ✅',st:'CONFIRMED',sc:'#27AE60',sl:'CONFIRMÉ'},
+           {id:'ORD-004',s:'Marché de Gros',it:4,t:180,d:'J+3',st:'DRAFT',sc:'#3B82F6',sl:'EN ATTENTE'}
+          ].forEach(function(o){
+            var btn = o.st==='DRAFT' ? '<button style="background:#00C48C;color:#0D2137;border:none;border-radius:4px;padding:3px 9px;font-size:10.5px;cursor:pointer">✅ Valider</button>'
+                    : o.st==='SENT' ? '<span style="font-size:10.5px;color:#6A8FAB">En attente…</span>'
+                    : '<button style="background:#1A3A52;color:#fff;border:none;border-radius:4px;padding:3px 9px;font-size:10.5px;cursor:pointer">Réception</button>';
+            document.write('<tr><td style="font-weight:700">'+o.id+'</td><td>'+o.s+'</td><td style="color:#8BAABF">'+o.it+' articles</td><td style="font-weight:700">'+o.t+'</td><td style="color:#6A8FAB">'+o.d+'</td><td><span class="bdg" style="background:'+o.sc+'20;color:'+o.sc+'">'+o.sl+'</span></td><td>'+btn+'</td></tr>');
+          });
+          </script>
+        </table>
+      </div>
+      <div class="card">
+        <div class="ch"><div class="ct">📧 Email fournisseur — ORD-002 · Délice Holding</div></div>
+        <div style="background:#0A1A27;border-radius:8px;padding:13px;font-size:11.5px;line-height:1.7">
+          <div style="color:#6A8FAB">De : commandes@noveresto.app → b2b@delice.com.tn</div>
+          <div style="font-weight:700;margin:6px 0">Objet : Bon de commande ORD-002 — Burger House</div>
+          <div style="color:#8BAABF">Bonjour, Burger House vous adresse la commande suivante :<br>• Cheddar tranches : 3 kg — 54 TND<br>• Laitue iceberg : 12 pcs — 14.4 TND<br><br><span style="color:#00C48C;font-weight:700">Total : 380 TND · Livraison souhaitée : 17 Jan 2025</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="screen" id="s-reports">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">📊</div><div class="kpi-lbl">CA Semaine</div><div class="kpi-val">83 580 TND</div><span class="delta up">↑ +11.2%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">📈</div><div class="kpi-lbl">Food Cost moy.</div><div class="kpi-val">31.4%</div><span class="delta up">↓ −1.8 pts</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">🧾</div><div class="kpi-lbl">Couverts/sem.</div><div class="kpi-val">1 628</div><span class="delta up">↑ +8.4%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#8B5CF6"></div><div class="kpi-ico">🎯</div><div class="kpi-lbl">Précision IA</div><div class="kpi-val">93.7%</div><span class="delta nu">MAPE 6.3%</span></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">📄 Rapports automatiques</div></div>
+          <table>
+            <tr><th>Rapport</th><th>Fréquence</th><th>Statut</th></tr>
+            <tr><td style="font-weight:700">Rapport quotidien</td><td style="color:#6A8FAB">Chaque jour 7h00</td><td><span class="bdg" style="background:#27AE6020;color:#27AE60">✅ ENVOYÉ</span></td></tr>
+            <tr><td style="font-weight:700">Rapport hebdomadaire</td><td style="color:#6A8FAB">Lundi 6h00</td><td><span class="bdg" style="background:#27AE6020;color:#27AE60">✅ ENVOYÉ</span></td></tr>
+            <tr><td style="font-weight:700">Rapport mensuel</td><td style="color:#6A8FAB">1er du mois</td><td><span class="bdg" style="background:#27AE6020;color:#27AE60">✅ ENVOYÉ</span></td></tr>
+            <tr><td style="font-weight:700">Rapport food cost</td><td style="color:#6A8FAB">Vendredi 18h</td><td><span class="bdg" style="background:#3B82F620;color:#3B82F6">⏳ EN ATTENTE</span></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">🏆 Top ventes — Semaine</div></div>
+          <table>
+            <tr><th>Produit</th><th>Qté</th><th>CA TND</th><th>%</th></tr>
+            <tr><td>🍔 Burger Classic</td><td style="color:#8BAABF">342</td><td style="font-weight:700">4 275</td><td style="color:#00C48C;font-weight:700">28%</td></tr>
+            <tr><td>🍗 Chicken Burger</td><td style="color:#8BAABF">218</td><td style="font-weight:700">2 943</td><td style="color:#00C48C;font-weight:700">19%</td></tr>
+            <tr><td>🍔 Burger Double</td><td style="color:#8BAABF">156</td><td style="font-weight:700">2 574</td><td style="color:#00C48C;font-weight:700">17%</td></tr>
+            <tr><td>🍟 Frites Maison</td><td style="color:#8BAABF">489</td><td style="font-weight:700">2 690</td><td style="color:#00C48C;font-weight:700">18%</td></tr>
+            <tr><td>🥤 Coca-Cola</td><td style="color:#8BAABF">612</td><td style="font-weight:700">1 530</td><td style="color:#00C48C;font-weight:700">10%</td></tr>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ch"><div class="ct">📊 Résumé — Janvier 2025</div></div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:9px">
+          <script>
+          [['83 580 TND','#00C48C','CA Sem. 3'],['68.6%','#27AE60','Marge brute'],['1 628','#F5A623','Couverts'],['51.3 TND','#3B82F6','Ticket moy.'],['93.7%','#8B5CF6','Précision IA'],['+11.2%','#00C48C','vs N-1']].forEach(function(m){
+            document.write('<div style="background:#0A1A27;border-radius:8px;padding:11px;text-align:center"><div style="font-size:17px;font-weight:800;color:'+m[1]+'">'+m[0]+'</div><div style="font-size:10px;color:#6A8FAB;margin-top:3px">'+m[2]+'</div></div>');
+          });
+          </script>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPUTATION -->
+    <div class="screen" id="s-reputation">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">⭐</div><div class="kpi-lbl">Note globale</div><div class="kpi-val">4.6 / 5</div><span class="delta up">↑ +0.3 pts</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">📝</div><div class="kpi-lbl">Total avis</div><div class="kpi-val">2 396</div><span class="delta up">+25 ce mois</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">✅</div><div class="kpi-lbl">Taux de réponse</div><div class="kpi-val">94%</div><span class="delta nu">Délai 18 min</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#8B5CF6"></div><div class="kpi-ico">🤖</div><div class="kpi-lbl">Réponses IA</div><div class="kpi-val">78%</div><span class="delta nu">Auto-générées</span></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">📡 Plateformes connectées</div></div>
+          <script>
+          [{ico:'🗺️',n:'Google Maps',r:4.7,c:1248,t:'+12 ce mois'},{ico:'📘',n:'Facebook',r:4.5,c:836,t:'+8 ce mois'},{ico:'🦉',n:'TripAdvisor',r:4.6,c:312,t:'+5 ce mois'}].forEach(function(p){
+            document.write('<div style="background:#0A1A27;border-radius:8px;padding:11px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">');
+            document.write('<div style="display:flex;gap:9px;align-items:center"><span style="font-size:22px">'+p.ico+'</span><div>');
+            document.write('<div style="font-weight:700;font-size:12.5px">'+p.n+'</div>');
+            document.write('<div style="font-size:12px;color:#F5A623">'+'★'.repeat(Math.floor(p.r))+' <span style="font-size:11px">'+p.r+'/5</span></div></div></div>');
+            document.write('<div style="text-align:right"><div style="font-size:12.5px;font-weight:700">'+p.c.toLocaleString()+' avis</div><div style="font-size:10.5px;color:#00C48C">'+p.t+'</div><span class="bdg" style="background:#00C48C20;color:#00C48C;margin-top:4px;display:inline-block">✅ Réponse auto</span></div>');
+            document.write('</div>');
+          });
+          </script>
+          <div class="ch" style="margin-top:14px"><div class="ct">📊 Distribution notes</div></div>
+          <script>
+          [[5,72,'#00C48C'],[4,18,'#00C48C'],[3,6,'#F5A623'],[2,3,'#E84545'],[1,1,'#E84545']].forEach(function(n){
+            document.write('<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">');
+            document.write('<div style="width:22px;font-size:11.5px;color:#F5A623;font-weight:700">'+n[0]+'★</div>');
+            document.write('<div style="flex:1;height:7px;background:#1A3A52;border-radius:3px;overflow:hidden"><div style="height:100%;width:'+n[1]+'%;background:'+n[2]+';border-radius:3px"></div></div>');
+            document.write('<div style="width:30px;font-size:11.5px;font-weight:700;text-align:right">'+n[1]+'%</div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">💬 Derniers avis</div></div>
+          <div class="rev">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:11.5px;font-weight:700">🗺️ Karim B. <span style="color:#F5A623">★★★★★</span></div>
+              <div style="display:flex;gap:7px;align-items:center"><span style="font-size:10.5px;color:#6A8FAB">Il y a 2h</span><span class="bdg" style="background:#00C48C20;color:#00C48C">✅ Répondu</span></div>
+            </div>
+            <div style="font-size:11.5px;color:#8BAABF">"Burger excellent ! Service rapide et frites croustillantes."</div>
+          </div>
+          <div class="rev">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:11.5px;font-weight:700">📘 Sarra M. <span style="color:#F5A623">★★★★☆</span></div>
+              <div style="display:flex;gap:7px;align-items:center"><span style="font-size:10.5px;color:#6A8FAB">Il y a 5h</span><span class="bdg" style="background:#00C48C20;color:#00C48C">✅ Répondu</span></div>
+            </div>
+            <div style="font-size:11.5px;color:#8BAABF">"Bonne qualité, ambiance sympa. Un peu d'attente le soir."</div>
+          </div>
+          <div class="rev" style="border:1px solid #00C48C30">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:11.5px;font-weight:700">🗺️ Mohamed T. <span style="color:#F5A623">★★★★★</span></div>
+              <div style="display:flex;gap:7px;align-items:center"><span style="font-size:10.5px;color:#6A8FAB">Hier</span><span class="bdg" style="background:#8B5CF620;color:#8B5CF6">🤖 IA suggère</span></div>
+            </div>
+            <div style="font-size:11.5px;color:#8BAABF">"Meilleur burger de Tunis ! J'y emmène toute ma famille."</div>
+            <div style="margin-top:8px;padding:7px;background:#00C48C10;border-radius:6px;font-size:10.5px;color:#00C48C">💡 « Merci Mohamed ! Ravis de vous accueillir en famille. À très bientôt ! »</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOCIAL -->
+    <div class="screen" id="s-social">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#FF0050"></div><div class="kpi-ico">🎵</div><div class="kpi-lbl">TikTok followers</div><div class="kpi-val">4 280</div><span class="delta up">↑ +12%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#E1306C"></div><div class="kpi-ico">📸</div><div class="kpi-lbl">Instagram</div><div class="kpi-val">2 847</div><span class="delta up">↑ +8%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#1877F2"></div><div class="kpi-ico">📘</div><div class="kpi-lbl">Facebook fans</div><div class="kpi-val">1 923</div><span class="delta up">↑ +5%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">📈</div><div class="kpi-lbl">Impact CA</div><div class="kpi-val">+18%</div><span class="delta up">Reel viral J+1</span></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="ch"><div class="ct">📅 Planning éditorial IA — Semaine</div><div class="cs">Basé sur prévisions de ventes</div></div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px">
+          <script>
+          [{d:'Lun',posts:[{p:'📸',t:'Story 11h30',txt:'Menu lundi',c:'#E1306C'},{p:'📘',t:'Post 12h',txt:'Spécial semaine',c:'#1877F2'}],ca:9.8},
+           {d:'Mar',posts:[{p:'🎵',t:'Reel 18h00',txt:'Prépa burger',c:'#FF0050'}],ca:11.2},
+           {d:'Mer',posts:[{p:'📸',t:'Story 11h30',txt:'Ingrédient du jour',c:'#E1306C'},{p:'📘',t:'Post 19h',txt:'Coulisses',c:'#1877F2'}],ca:10.5},
+           {d:'Jeu',posts:[{p:'🎵',t:'Reel 18h30',txt:'Challenge',c:'#FF0050'},{p:'📸',t:'Story 20h',txt:'Satisfaction',c:'#E1306C'}],ca:12.1},
+           {d:'Ven',posts:[{p:'📘',t:'Post 12h',txt:'Weekend',c:'#1877F2'},{p:'🎵',t:'Reel 18h',txt:'Ambiance',c:'#FF0050'}],ca:13.8},
+           {d:'Sam',posts:[{p:'📸',t:'Story 11h',txt:'Offre samedi',c:'#E1306C'},{p:'🎵',t:'Reel 19h',txt:'Best of',c:'#FF0050'}],ca:14.2},
+           {d:'Dim',posts:[{p:'📘',t:'Post 12h',txt:'Famille',c:'#1877F2'}],ca:12.5}
+          ].forEach(function(day,i){
+            document.write('<div>');
+            document.write('<div style="background:'+(i>=5?'#00C48C':'#1A3A52')+';border-radius:5px;padding:4px 3px;text-align:center;font-size:11.5px;font-weight:700;margin-bottom:5px">'+day.d+'</div>');
+            day.posts.forEach(function(p){
+              document.write('<div style="background:#0A1A27;border:1px solid '+p.c+'40;border-radius:5px;padding:5px 4px;margin-bottom:4px">');
+              document.write('<div style="font-size:9px;font-weight:700;color:'+p.c+'">'+p.p+' '+p.t+'</div>');
+              document.write('<div style="font-size:9px;color:#8BAABF;margin-top:2px">'+p.txt+'</div>');
+              document.write('</div>');
+            });
+            document.write('<div style="background:#00C48C15;border-radius:5px;padding:3px;text-align:center;font-size:9px;color:#00C48C;margin-top:3px">'+day.ca+'k TND</div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">🎵 Stratégies Tunisie</div></div>
+          <script>
+          [['🎬','Vidéos préparation','Format 15-30s · 11h30 ou 18h00 · Chef en cuisine'],
+           ['🌙','Tendances Ramadan','#RamadanTunisie #IftarBurger — engagement ×2.4'],
+           ['👥','Duets & Challenges','#MonBurgerMaison — engagement ×4 vs posts standard'],
+           ['📍','TikTok Location Tag','#LacTunis #Manar #Ennasr — visibilité géolocalisée']
+          ].forEach(function(s){
+            document.write('<div style="display:flex;gap:9px;padding:9px 0;border-bottom:1px solid #1A3A5215">');
+            document.write('<span style="font-size:19px;width:26px">'+s[0]+'</span>');
+            document.write('<div><div style="font-size:12px;font-weight:700">'+s[1]+'</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">'+s[2]+'</div></div>');
+            document.write('</div>');
+          });
+          </script>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">📊 Impact sur les ventes</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+            <script>
+            [['+18%','#00C48C','CA Reel viral J+1'],['×3.2','#E1306C','Commandes post-story'],['+340','#1877F2','Vues Google/sem.'],['4.6★','#F5A623','Note en 3 mois']].forEach(function(m){
+              document.write('<div style="background:#0A1A27;border-radius:7px;padding:11px;text-align:center"><div style="font-size:21px;font-weight:800;color:'+m[1]+'">'+m[0]+'</div><div style="font-size:10px;color:#6A8FAB;margin-top:3px">'+m[2]+'</div></div>');
+            });
+            </script>
+          </div>
+          <div style="padding:9px;background:#F5A62310;border-radius:7px;font-size:11px;color:#F5A623">
+            🌙 Ramadan : Stories Iftar 18h45 · Sahour 2h30 · Hashtags auto
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FIDELISATION -->
+    <div class="screen" id="s-fidelisation">
+      <div class="g4">
+        <div class="kpi"><div class="kpi-top" style="background:#00C48C"></div><div class="kpi-ico">👥</div><div class="kpi-lbl">Clients inscrits</div><div class="kpi-val">847</div><span class="delta up">+34 ce mois</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#F5A623"></div><div class="kpi-ico">🥇</div><div class="kpi-lbl">Clients VIP</div><div class="kpi-val">124</div><span class="delta up">500+ points</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#27AE60"></div><div class="kpi-ico">🔄</div><div class="kpi-lbl">Taux de retour</div><div class="kpi-val">68%</div><span class="delta up">↑ +12%</span></div>
+        <div class="kpi"><div class="kpi-top" style="background:#3B82F6"></div><div class="kpi-ico">💰</div><div class="kpi-lbl">Dépense fidèle</div><div class="kpi-val">82 TND</div><span class="delta up">vs 51 non-fidèle</span></div>
+      </div>
+      <div class="g2">
+        <div class="card">
+          <div class="ch"><div class="ct">🏆 Programme de fidélité</div><div class="cs">1 TND = 1 point</div></div>
+          <div class="tier-c" style="background:#1A0D00;border:1px solid #8B6A3A60;border-radius:9px">
+            <span style="font-size:26px">🥉</span>
+            <div style="flex:1"><div style="font-weight:700;font-size:13.5px">Découvreur</div><div style="font-size:11px;color:#6A8FAB;margin-bottom:5px">0 — 199 pts</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ 5% remise dès la 3e visite</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ Anniversaire : burger offert</div></div>
+            <div style="font-size:12px;color:#6A8FAB">423 clients</div>
+          </div>
+          <div class="tier-c" style="background:#0D1A26;border:1px solid #6A8FAB60;border-radius:9px">
+            <span style="font-size:26px">🥈</span>
+            <div style="flex:1"><div style="font-weight:700;font-size:13.5px">Habitué</div><div style="font-size:11px;color:#6A8FAB;margin-bottom:5px">200 — 499 pts</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ 10% remise permanente</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ Priorité en service</div></div>
+            <div style="font-size:12px;color:#6A8FAB">300 clients</div>
+          </div>
+          <div class="tier-c" style="background:#1A1200;border:2px solid #F5A62360;border-radius:9px">
+            <span style="font-size:26px">🥇</span>
+            <div style="flex:1"><div style="font-weight:700;font-size:13.5px;color:#F5A623">VIP</div><div style="font-size:11px;color:#6A8FAB;margin-bottom:5px">500+ pts</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ 15% remise + dessert offert</div>
+            <div style="font-size:10.5px;color:#8BAABF">✓ Table réservée prioritaire</div></div>
+            <div style="font-size:12px;color:#F5A623">124 clients</div>
+          </div>
+          <div style="padding:9px;background:#001A0A;border:1px solid #00C48C30;border-radius:7px;font-size:10.5px;color:#00C48C">
+            💡 Avis laissé = 20 pts · Partage réseaux = 10 pts · Anniversaire = 50 pts
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><div class="ct">🎯 Promos intelligentes</div></div>
+          <script>
+          [{ico:'📍',c:'#3B82F6',t:'Géofencing 300m',d:"Push si client à moins de 300m : « −10% ce soir »"},
+           {ico:'🌙',c:'#F5A623',t:'Promo Ramadan',d:'Offre Iftar à 18h30 aux clients fidèles'},
+           {ico:'🎂',c:'#00C48C',t:'Anniversaire',d:"Dessert offert le jour J · Taux de visite : 78%"},
+           {ico:'⏰',c:'#8B5CF6',t:'Happy Hour IA',d:'Promo auto quand prévision est faible'},
+           {ico:'🔄',c:'#E84545',t:'Win-back −20%',d:'Client absent 21+ jours · Réactivation : 34%'},
+           {ico:'👨‍👩‍👧',c:'#27AE60',t:'Parrainage',d:'Parrain + filleul : 50 pts bonus chacun'}
+          ].forEach(function(p){
+            document.write('<div style="display:flex;gap:9px;padding:9px 0;border-bottom:1px solid #1A3A5215">');
+            document.write('<span style="font-size:18px;width:26px">'+p.ico+'</span>');
+            document.write('<div><div style="font-size:12px;font-weight:700;color:'+p.c+'">'+p.t+'</div><div style="font-size:10.5px;color:#6A8FAB;margin-top:2px">'+p.d+'</div></div>');
+            document.write('</div>');
+          });
+          </script>
+          <div class="ch" style="margin-top:14px"><div class="ct">👑 Top clients</div></div>
+          <table>
+            <tr><th>Client</th><th>Statut</th><th>Points</th></tr>
+            <tr><td style="font-weight:700">🥇 Karim Ben Ali</td><td><span class="bdg" style="background:#F5A62320;color:#F5A623">VIP</span></td><td style="color:#F5A623;font-weight:700">847</td></tr>
+            <tr><td style="font-weight:700">🥈 Sarra Mansouri</td><td><span class="bdg" style="background:#F5A62320;color:#F5A623">VIP</span></td><td style="color:#F5A623;font-weight:700">724</td></tr>
+            <tr><td>🥉 Mohamed Trabelsi</td><td><span class="bdg" style="background:#6A8FAB20;color:#6A8FAB">Habitué</span></td><td>412</td></tr>
+            <tr><td>4  Fatma Nasri</td><td><span class="bdg" style="background:#6A8FAB20;color:#6A8FAB">Habitué</span></td><td>389</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .content -->
+
+  <div class="statusbar">
+    <div class="sdot"></div>
+    <span>Mode : <b style="color:#00C48C">Démo interactive</b></span>
+    <span>|</span>
+    <span>Restaurant : <b style="color:#fff">Burger House — Lac Tunis</b></span>
+    <span>|</span>
+    <span>Données : <b style="color:#F5A623">Fictives · NoveResto Demo</b></span>
+    <span style="margin-left:auto">© 2025 Noverio SaaS · noveresto.app</span>
+  </div>
+</div>
+
+<script>
+var TITLES = {dashboard:'📊 Tableau de bord',forecasts:'🧠 Prévisions IA',stocks:'📦 Stocks',orders:'🛒 Commandes',reports:'📄 Rapports',reputation:'⭐ Réputation',social:'📲 Social Media',fidelisation:'♥ Fidélisation'};
+
+function nav(id, el) {
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active')});
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.remove('active')});
+  document.getElementById('s-'+id).classList.add('active');
+  if(el) el.classList.add('active');
+  document.getElementById('ptitle').textContent = TITLES[id]||id;
+  document.querySelector('.content').scrollTop = 0;
+}
+
+function tick() {
+  var n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('fr-FR');
+  document.getElementById('topdate').textContent=n.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+}
+tick(); setInterval(tick,1000);
+</script>
+</body>
+</html>
