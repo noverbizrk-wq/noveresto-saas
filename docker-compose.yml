@@ -1,0 +1,32 @@
+﻿version: '3.9'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nr_postgres
+    environment:
+      POSTGRES_DB: noveresto_dev
+      POSTGRES_USER: noveresto
+      POSTGRES_PASSWORD: noveresto_dev_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    container_name: nr_redis
+    command: redis-server --requirepass noveresto_redis_secret
+    ports:
+      - "6379:6379"
+  mailhog:
+    image: mailhog/mailhog
+    container_name: nr_mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+  adminer:
+    image: adminer
+    container_name: nr_adminer
+    ports:
+      - "8080:8080"
+volumes:
+  pg_data:
