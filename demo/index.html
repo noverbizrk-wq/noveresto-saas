@@ -298,7 +298,7 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
             <div class="user-info-name" id="dd-name">Karim Ben Ali</div>
             <div class="user-info-role" id="dd-role">Client</div>
           </div>
-          <a class="dd-item" href="https://noveresto.app" target="_blank">📊 Dashboard</a>
+          <a class="dd-item" href="/app/dashboard" target="_blank">📊 Dashboard</a>
           <div class="dd-sep"></div>
           <div class="dd-item" onclick="logout()">🚪 Déconnexion</div>
         </div>
@@ -346,18 +346,7 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
   </div>
 </div>
 
-<!-- LOGOS -->
-<div class="logos-band">
-  <div class="logos-inner">
-    <div class="logo-item"><span>🇹🇳</span> Tunisie</div>
-    <div class="logo-item"><span>🇲🇦</span> Maroc</div>
-    <div class="logo-item"><span>🇩🇿</span> Algérie</div>
-    <div class="logo-item"><span>🇸🇳</span> Sénégal</div>
-    <div class="logo-item"><span>🇨🇮</span> Côte d'Ivoire</div>
-    <div class="logo-item"><span>🇦🇪</span> UAE</div>
-    <div class="logo-item">🔌 Radvision · Odoo · Oracle</div>
-  </div>
-</div>
+
 
 <!-- FEATURES -->
 <section id="features">
@@ -450,7 +439,7 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
       <div class="demo-topbar">
         <div class="demo-dots"><div class="demo-dot" style="background:#E84545"></div><div class="demo-dot" style="background:#F5A623"></div><div class="demo-dot" style="background:#00C48C"></div></div>
         <div class="demo-url">🔒 noveresto.app/dashboard</div>
-        <a href="https://noveresto.app" target="_blank" style="font-size:11px;color:var(--teal);text-decoration:none">↗ Plein écran</a>
+        <a href="/app/dashboard" target="_blank" style="font-size:11px;color:var(--teal);text-decoration:none">↗ Plein écran</a>
       </div>
       <div class="demo-body">
         <div class="demo-sb">
@@ -481,7 +470,7 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
       </div>
     </div>
     <div style="text-align:center;margin-top:18px">
-      <a href="https://noveresto.app" target="_blank" class="btn-primary" style="padding:12px 28px;border-radius:10px;font-size:15px">↗ Ouvrir le dashboard complet</a>
+      <a href="/app/dashboard" target="_blank" class="btn-primary" style="padding:12px 28px;border-radius:10px;font-size:15px">↗ Ouvrir le dashboard complet</a>
     </div>
   </div>
 </section>
@@ -574,13 +563,29 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
           <div class="fg"><label>Restaurant</label><input type="text" id="c-restaurant" placeholder="Burger House"></div>
           <div class="fg"><label>Téléphone</label><input type="tel" id="c-phone" placeholder="+216 XX XXX XXX"></div>
         </div>
-        <div class="fg">
-          <label>Pays</label>
-          <select id="c-country">
-            <option value="">Sélectionner...</option>
-            <option>🇹🇳 Tunisie</option><option>🇲🇦 Maroc</option><option>🇩🇿 Algérie</option>
-            <option>🇸🇳 Sénégal</option><option>🇨🇮 Côte d'Ivoire</option><option>🇦🇪 UAE</option><option>Autre</option>
-          </select>
+        <div class="fr2">
+          <div class="fg">
+            <label>Pays</label>
+            <select id="c-country">
+              <option value="">Sélectionner...</option>
+              <option>🇹🇳 Tunisie</option><option>🇲🇦 Maroc</option><option>🇩🇿 Algérie</option>
+              <option>🇸🇳 Sénégal</option><option>🇨🇮 Côte d'Ivoire</option><option>🇦🇪 UAE</option>
+              <option>🇫🇷 France</option><option>🇧🇪 Belgique</option><option>Autre</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label>Devise</label>
+            <select id="c-currency">
+              <option value="TND">🇹🇳 TND — Dinar tunisien</option>
+              <option value="EUR">🇪🇺 EUR — Euro</option>
+              <option value="MAD">🇲🇦 MAD — Dirham marocain</option>
+              <option value="DZD">🇩🇿 DZD — Dinar algérien</option>
+              <option value="XOF">🌍 XOF — Franc CFA</option>
+              <option value="AED">🇦🇪 AED — Dirham UAE</option>
+              <option value="SAR">🇸🇦 SAR — Riyal saoudien</option>
+              <option value="USD">🇺🇸 USD — Dollar</option>
+            </select>
+          </div>
         </div>
         <div class="fg">
           <label>Objet</label>
@@ -671,12 +676,27 @@ footer{background:var(--navyD);border-top:1px solid var(--navyL);padding:56px 24
       </div>
       <div class="mfg"><label>Email professionnel *</label><input type="email" id="r-email" placeholder="vous@restaurant.com"></div>
       <div class="mfg"><label>Nom du restaurant *</label><input type="text" id="r-restaurant" placeholder="Burger House"></div>
-      <div class="mfg"><label>Pays</label>
-        <select id="r-country">
-          <option value="">Sélectionner...</option>
-          <option>🇹🇳 Tunisie</option><option>🇲🇦 Maroc</option><option>🇩🇿 Algérie</option>
-          <option>🇸🇳 Sénégal</option><option>🇦🇪 UAE</option><option>Autre</option>
-        </select>
+      <div class="mfr">
+        <div class="mfg"><label>Pays</label>
+          <select id="r-country">
+            <option value="">Sélectionner...</option>
+            <option>🇹🇳 Tunisie</option><option>🇲🇦 Maroc</option><option>🇩🇿 Algérie</option>
+            <option>🇸🇳 Sénégal</option><option>🇨🇮 Côte d'Ivoire</option><option>🇦🇪 UAE</option>
+            <option>🇫🇷 France</option><option>🇧🇪 Belgique</option><option>Autre</option>
+          </select>
+        </div>
+        <div class="mfg"><label>Devise</label>
+          <select id="r-currency">
+            <option value="TND">🇹🇳 TND</option>
+            <option value="EUR">🇪🇺 EUR</option>
+            <option value="MAD">🇲🇦 MAD</option>
+            <option value="DZD">🇩🇿 DZD</option>
+            <option value="XOF">🌍 XOF</option>
+            <option value="AED">🇦🇪 AED</option>
+            <option value="SAR">🇸🇦 SAR</option>
+            <option value="USD">🇺🇸 USD</option>
+          </select>
+        </div>
       </div>
       <div class="mfg"><label>Mot de passe * (8 caractères min.)</label><input type="password" id="r-pass" placeholder="••••••••"></div>
       <div class="auth-msg" id="register-msg"></div>
