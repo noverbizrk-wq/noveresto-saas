@@ -190,6 +190,12 @@ app.use('/api/v1/reputation', authMiddleware, (req, res, next) => { req.pool = p
 const socialRoutes = require('./social-routes')
 app.use('/api/v1/social', authMiddleware, socialRoutes)
 
+const restaurantScopeMiddleware = require('./middleware/restaurant-scope-middleware')
+const restaurantOrdersRoutes = require('./restaurant-orders-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+const restaurantMenuRoutes = require('./restaurant-menu-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+app.use('/api/v1/restaurant', restaurantOrdersRoutes)
+app.use('/api/v1/restaurant', restaurantMenuRoutes)
+
 const PORT = 3000
 app.listen(PORT, () => {
   console.log('\n  NoveResto API v1.3.0')
