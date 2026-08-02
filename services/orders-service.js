@@ -5,6 +5,7 @@
 // écrite — ce module corrige ce pattern pour son propre domaine).
 
 const { logAction } = require('./audit-log-service');
+const { deductStockForOrder } = require('./stock-service');
 
 const VALID_STATUSES = [
   'new', 'to_validate', 'accepted', 'in_preparation', 'ready',
@@ -127,6 +128,15 @@ async function changeOrderStatus(pool, orderId, toStatus, { changedBy, reason, r
     );
 
     await client.query('COMMIT');
+
+    // Point d'accroche prévu en Lot 1 : déduction de stock selon les fiches
+    // techniques (Lot 2). Best-effort — n'échoue jamais la mise à jour de statut.
+    if (toStatus === 'completed') {
+      await deductStockForOrder(pool, orderId, {
+        restaurantId: restaurantId || current.rows[0].restaurant_id,
+        userId: changedBy
+      });
+    }
 
     if (AUDITED_STATUSES.has(toStatus)) {
       await logAction(pool, {
