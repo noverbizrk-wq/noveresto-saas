@@ -76,8 +76,8 @@ async function createOrder(pool, payload) {
     for (const item of payload.items) {
       await client.query(
         `INSERT INTO order_items
-          (order_id, menu_item_id, item_name, quantity, unit_price, modifiers, station)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          (order_id, menu_item_id, item_name, quantity, unit_price, modifiers, station, vat_rate)
+         VALUES ($1,$2,$3,$4,$5,$6,$7, (SELECT vat_rate FROM menu_items WHERE id = $2))`,
         [
           order.id, item.menu_item_id, item.item_name, item.quantity,
           item.unit_price, JSON.stringify(item.modifiers || []), item.station || null
