@@ -5,18 +5,40 @@ const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const { Pool } = require('pg')
 const fetch = require('node-fetch')
+const helmet = require('helmet')
+const rateLimit = require('express-rate-limit')
 
 const app = express()
-app.use(cors())
+app.use(helmet())
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'https://noveresto.app',
+  credentials: true
+}))
 app.use(express.json())
 
-const JWT_SECRET = process.env.JWT_SECRET || 'noveresto_jwt_secret_2025_mena'
+// AUDIT SÉCURITÉ : plus de secret par défaut — le serveur refuse de démarrer
+// si JWT_SECRET est absent ou trop court. Générer avec :
+//   node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error('ERREUR FATALE : JWT_SECRET manquant ou trop faible (minimum 32 caractères) dans .env — arrêt du serveur.')
+  process.exit(1)
+}
 
 const pool = new Pool({
   host: 'localhost', port: 5432,
   database: 'noveresto', user: 'noveresto', password: 'NoveResto2025!'
 })
 pool.connect().then(() => console.log('  PostgreSQL connecte')).catch(e => console.error('  PostgreSQL erreur:', e.message))
+
+// AUDIT SÉCURITÉ : limite les tentatives de connexion (protection brute-force)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
 
 function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1]
@@ -30,7 +52,7 @@ function adminOnly(req, res, next) {
   next()
 }
 
-app.post('/api/v1/auth/login', async (req, res) => {
+app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email et mot de passe requis' })
   try {
