@@ -3,7 +3,17 @@
 
 const express = require('express');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
 const copilotService = require('./services/copilot-service');
+
+// AUDIT SÉCURITÉ : limite les appels au copilote (coût API + abus)
+const copilotLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: { error: 'Trop de questions envoyées au copilote. Patientez une minute.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 module.exports = function (pool, authMiddleware, restaurantScope) {
 
@@ -30,11 +40,14 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // POST /api/v1/restaurant/copilot/ask  { question }
-  router.post('/copilot/ask', restaurantScope, async (req, res) => {
+  router.post('/copilot/ask', copilotLimiter, restaurantScope, async (req, res) => {
     try {
       const { question } = req.body;
       if (!question || !question.trim()) {
         return res.status(400).json({ error: 'question requise' });
+      }
+      if (question.length > 500) {
+        return res.status(400).json({ error: 'Question trop longue (500 caractères maximum)' });
       }
       if (!process.env.ANTHROPIC_API_KEY) {
         return res.status(503).json({ error: 'Copilote IA non configuré (clé API manquante)' });
