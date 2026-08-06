@@ -19,8 +19,10 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const copilotAccess = require('./middleware/module-access-middleware')(pool, 'copilot');
+
   // GET /api/v1/restaurant/copilot/context — données brutes utilisées par le copilote
-  router.get('/copilot/context', restaurantScope, async (req, res) => {
+  router.get('/copilot/context', restaurantScope, copilotAccess, async (req, res) => {
     try {
       const context = await copilotService.buildRestaurantContext(pool, req.scopedRestaurantId);
       res.json(context);
@@ -30,7 +32,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // GET /api/v1/restaurant/copilot/recommendations — alertes calculées (pas d'IA)
-  router.get('/copilot/recommendations', restaurantScope, async (req, res) => {
+  router.get('/copilot/recommendations', restaurantScope, copilotAccess, async (req, res) => {
     try {
       const recommendations = await copilotService.getRecommendations(pool, req.scopedRestaurantId);
       res.json({ data: recommendations });
@@ -40,7 +42,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // POST /api/v1/restaurant/copilot/ask  { question }
-  router.post('/copilot/ask', copilotLimiter, restaurantScope, async (req, res) => {
+  router.post('/copilot/ask', copilotLimiter, restaurantScope, copilotAccess, async (req, res) => {
     try {
       const { question } = req.body;
       if (!question || !question.trim()) {

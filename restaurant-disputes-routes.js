@@ -9,8 +9,10 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const disputesAccess = require('./middleware/module-access-middleware')(pool, 'disputes');
+
   // GET /api/v1/restaurant/disputes?status=
-  router.get('/disputes', restaurantScope, async (req, res) => {
+  router.get('/disputes', restaurantScope, disputesAccess, async (req, res) => {
     const { status } = req.query;
     const conditions = ['d.restaurant_id = $1'];
     const params = [req.scopedRestaurantId];
@@ -27,12 +29,12 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.get('/disputes/summary', restaurantScope, async (req, res) => {
+  router.get('/disputes/summary', restaurantScope, disputesAccess, async (req, res) => {
     const summary = await disputesService.getDisputesSummary(pool, req.scopedRestaurantId);
     res.json(summary);
   });
 
-  router.get('/disputes/:id', restaurantScope, async (req, res) => {
+  router.get('/disputes/:id', restaurantScope, disputesAccess, async (req, res) => {
     const dispute = await pool.query(
       'SELECT * FROM disputes WHERE id = $1 AND restaurant_id = $2',
       [req.params.id, req.scopedRestaurantId]
@@ -50,7 +52,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ ...dispute.rows[0], evidence: evidence.rows, history: history.rows });
   });
 
-  router.post('/disputes', restaurantScope, async (req, res) => {
+  router.post('/disputes', restaurantScope, disputesAccess, async (req, res) => {
     try {
       const { order_id, review_id, platform, reason, amount_requested, due_date } = req.body;
       if (!reason) return res.status(400).json({ error: 'reason requis' });
@@ -76,7 +78,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // PATCH /api/v1/restaurant/disputes/:id/status  { status, amount_refunded? }
-  router.patch('/disputes/:id/status', restaurantScope, async (req, res) => {
+  router.patch('/disputes/:id/status', restaurantScope, disputesAccess, async (req, res) => {
     try {
       const { status, amount_refunded } = req.body;
       if (!status) return res.status(400).json({ error: 'status requis' });
@@ -99,7 +101,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // POST /api/v1/restaurant/disputes/:id/evidence  { photo_url, note }
-  router.post('/disputes/:id/evidence', restaurantScope, async (req, res) => {
+  router.post('/disputes/:id/evidence', restaurantScope, disputesAccess, async (req, res) => {
     try {
       const { photo_url, note } = req.body;
       if (!photo_url) return res.status(400).json({ error: 'photo_url requis' });

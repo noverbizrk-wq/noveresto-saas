@@ -114,6 +114,9 @@ app.get('/api/v1/admin/contacts', authMiddleware, adminOnly, async (req, res) =>
   res.json({ contacts: rows, total: rows.length })
 })
 
+const adminModuleAccessRoutes = require('./admin-module-access-routes')(pool)
+app.use('/api/v1/admin', authMiddleware, adminOnly, adminModuleAccessRoutes)
+
 app.get('/api/v1/health', async (req, res) => {
   try {
     await pool.query('SELECT 1')

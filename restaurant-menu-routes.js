@@ -7,9 +7,11 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const menusAccess = require('./middleware/module-access-middleware')(pool, 'menus');
+
   // ---------- Menus & catégories ----------
 
-  router.get('/menu-categories', restaurantScope, async (req, res) => {
+  router.get('/menu-categories', restaurantScope, menusAccess, async (req, res) => {
     const result = await pool.query(
       'SELECT * FROM menu_categories WHERE restaurant_id = $1 ORDER BY position, name',
       [req.scopedRestaurantId]
@@ -17,7 +19,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/menu-categories', restaurantScope, async (req, res) => {
+  router.post('/menu-categories', restaurantScope, menusAccess, async (req, res) => {
     const { name, position, menu_id } = req.body;
     if (!name) return res.status(400).json({ error: 'name requis' });
     const result = await pool.query(
@@ -30,7 +32,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // ---------- Articles de menu (menu_items, ex-"products") ----------
 
   // GET /api/v1/restaurant/menu-items?restaurant_id=&category_id=&available=
-  router.get('/menu-items', restaurantScope, async (req, res) => {
+  router.get('/menu-items', restaurantScope, menusAccess, async (req, res) => {
     try {
       const { category_id, available } = req.query;
       const conditions = ['p.restaurant_id = $1'];
@@ -53,7 +55,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.post('/menu-items', restaurantScope, async (req, res) => {
+  router.post('/menu-items', restaurantScope, menusAccess, async (req, res) => {
     try {
       const { category_id, name, description, price, vat_rate, photo_url } = req.body;
       if (!name || price === undefined) {
@@ -70,7 +72,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.patch('/menu-items/:id', restaurantScope, async (req, res) => {
+  router.patch('/menu-items/:id', restaurantScope, menusAccess, async (req, res) => {
     try {
       const fields = ['name', 'description', 'price', 'vat_rate', 'is_available', 'photo_url', 'category_id'];
       const updates = [];
@@ -95,7 +97,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.patch('/menu-items/:id/availability', restaurantScope, async (req, res) => {
+  router.patch('/menu-items/:id/availability', restaurantScope, menusAccess, async (req, res) => {
     const { is_available } = req.body;
     const result = await pool.query(
       'UPDATE menu_items SET is_available = $1 WHERE id = $2 AND restaurant_id = $3 RETURNING *',

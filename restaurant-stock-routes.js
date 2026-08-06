@@ -9,10 +9,14 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const moduleAccessMiddleware = require('./middleware/module-access-middleware');
+  const stocksAccess = moduleAccessMiddleware(pool, 'stocks');
+  const purchasesAccess = moduleAccessMiddleware(pool, 'purchases');
+
   // ---------- Mouvements de stock ----------
 
   // GET /api/v1/restaurant/stock-movements?ingredient_id=&limit=
-  router.get('/stock-movements', restaurantScope, async (req, res) => {
+  router.get('/stock-movements', restaurantScope, stocksAccess, async (req, res) => {
     const { ingredient_id, limit = 50 } = req.query;
     const conditions = ['sm.restaurant_id = $1'];
     const params = [req.scopedRestaurantId];
@@ -33,7 +37,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // POST /api/v1/restaurant/stock-movements/adjust — correction manuelle
-  router.post('/stock-movements/adjust', restaurantScope, async (req, res) => {
+  router.post('/stock-movements/adjust', restaurantScope, stocksAccess, async (req, res) => {
     try {
       const { ingredient_id, quantity_delta, movement_type, note } = req.body;
       if (!ingredient_id || quantity_delta === undefined) {
@@ -59,7 +63,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   // ---------- Achats fournisseurs ----------
 
-  router.get('/purchase-orders', restaurantScope, async (req, res) => {
+  router.get('/purchase-orders', restaurantScope, purchasesAccess, async (req, res) => {
     const { status } = req.query;
     const conditions = ['po.restaurant_id = $1'];
     const params = [req.scopedRestaurantId];
@@ -76,7 +80,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.get('/purchase-orders/:id', restaurantScope, async (req, res) => {
+  router.get('/purchase-orders/:id', restaurantScope, purchasesAccess, async (req, res) => {
     const po = await pool.query(
       'SELECT * FROM purchase_orders WHERE id = $1 AND restaurant_id = $2',
       [req.params.id, req.scopedRestaurantId]
@@ -93,7 +97,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ ...po.rows[0], items: items.rows });
   });
 
-  router.post('/purchase-orders', restaurantScope, async (req, res) => {
+  router.post('/purchase-orders', restaurantScope, purchasesAccess, async (req, res) => {
     const client = await pool.connect();
     try {
       const { supplier_id, items } = req.body;
@@ -131,7 +135,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // PATCH /api/v1/restaurant/purchase-orders/:id/receive — réception, incrémente le stock
-  router.patch('/purchase-orders/:id/receive', restaurantScope, async (req, res) => {
+  router.patch('/purchase-orders/:id/receive', restaurantScope, purchasesAccess, async (req, res) => {
     try {
       const owns = await pool.query(
         'SELECT id FROM purchase_orders WHERE id = $1 AND restaurant_id = $2',
@@ -148,7 +152,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   // ---------- Fournisseurs (table créée vide en Lot 1) ----------
 
-  router.get('/suppliers', restaurantScope, async (req, res) => {
+  router.get('/suppliers', restaurantScope, purchasesAccess, async (req, res) => {
     const result = await pool.query(
       'SELECT * FROM suppliers WHERE restaurant_id = $1 ORDER BY name',
       [req.scopedRestaurantId]
@@ -156,7 +160,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/suppliers', restaurantScope, async (req, res) => {
+  router.post('/suppliers', restaurantScope, purchasesAccess, async (req, res) => {
     try {
       const { name, contact_phone, contact_email, payment_terms } = req.body;
       if (!name) return res.status(400).json({ error: 'name requis' });

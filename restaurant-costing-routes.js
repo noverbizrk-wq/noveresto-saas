@@ -9,9 +9,13 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const moduleAccessMiddleware = require('./middleware/module-access-middleware');
+  const stocksAccess = moduleAccessMiddleware(pool, 'stocks');
+  const recipesAccess = moduleAccessMiddleware(pool, 'recipes');
+
   // ---------- Ingrédients ----------
 
-  router.get('/ingredients', restaurantScope, async (req, res) => {
+  router.get('/ingredients', restaurantScope, stocksAccess, async (req, res) => {
     const result = await pool.query(
       `SELECT i.*, s.name AS supplier_name
        FROM ingredients i
@@ -23,7 +27,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/ingredients', restaurantScope, async (req, res) => {
+  router.post('/ingredients', restaurantScope, stocksAccess, async (req, res) => {
     try {
       const { name, unit, current_stock, min_stock, unit_cost, supplier_id } = req.body;
       if (!name) return res.status(400).json({ error: 'name requis' });
@@ -38,7 +42,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.patch('/ingredients/:id', restaurantScope, async (req, res) => {
+  router.patch('/ingredients/:id', restaurantScope, stocksAccess, async (req, res) => {
     try {
       const fields = ['name', 'unit', 'min_stock', 'unit_cost', 'supplier_id'];
       const updates = [];
@@ -64,7 +68,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // Alertes stock faible (ingrédients sous leur seuil min)
-  router.get('/ingredients/alerts/low-stock', restaurantScope, async (req, res) => {
+  router.get('/ingredients/alerts/low-stock', restaurantScope, stocksAccess, async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM ingredients
        WHERE restaurant_id = $1 AND current_stock <= min_stock AND min_stock > 0
@@ -77,7 +81,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // ---------- Fiches techniques (recettes) ----------
 
   // GET /api/v1/restaurant/recipe-ingredients?menu_item_id=
-  router.get('/recipe-ingredients', restaurantScope, async (req, res) => {
+  router.get('/recipe-ingredients', restaurantScope, recipesAccess, async (req, res) => {
     const { menu_item_id } = req.query;
     if (!menu_item_id) return res.status(400).json({ error: 'menu_item_id requis' });
 
@@ -99,7 +103,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/recipe-ingredients', restaurantScope, async (req, res) => {
+  router.post('/recipe-ingredients', restaurantScope, recipesAccess, async (req, res) => {
     try {
       const { menu_item_id, ingredient_id, quantity } = req.body;
       if (!menu_item_id || !ingredient_id || quantity === undefined) {
@@ -124,7 +128,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.delete('/recipe-ingredients/:id', restaurantScope, async (req, res) => {
+  router.delete('/recipe-ingredients/:id', restaurantScope, recipesAccess, async (req, res) => {
     const result = await pool.query(
       `DELETE FROM recipe_ingredients ri
        USING menu_items mi
@@ -139,7 +143,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // ---------- Coûts et marges ----------
 
   // GET /api/v1/restaurant/menu-items/:id/cost
-  router.get('/menu-items/:id/cost', restaurantScope, async (req, res) => {
+  router.get('/menu-items/:id/cost', restaurantScope, recipesAccess, async (req, res) => {
     try {
       const owns = await pool.query(
         'SELECT id FROM menu_items WHERE id = $1 AND restaurant_id = $2',
@@ -155,7 +159,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // GET /api/v1/restaurant/costs/summary — vue synthétique tous articles
-  router.get('/costs/summary', restaurantScope, async (req, res) => {
+  router.get('/costs/summary', restaurantScope, recipesAccess, async (req, res) => {
     try {
       const costs = await costingService.getAllMenuItemCosts(pool, req.scopedRestaurantId);
       res.json({ data: costs });

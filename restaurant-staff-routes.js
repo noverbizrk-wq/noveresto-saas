@@ -8,9 +8,11 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const staffAccess = require('./middleware/module-access-middleware')(pool, 'staff');
+
   // ---------- Employés ----------
 
-  router.get('/employees', restaurantScope, async (req, res) => {
+  router.get('/employees', restaurantScope, staffAccess, async (req, res) => {
     const { active } = req.query;
     const conditions = ['restaurant_id = $1'];
     const params = [req.scopedRestaurantId];
@@ -23,7 +25,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/employees', restaurantScope, async (req, res) => {
+  router.post('/employees', restaurantScope, staffAccess, async (req, res) => {
     try {
       const { name, role, phone, email, hourly_cost } = req.body;
       if (!name) return res.status(400).json({ error: 'name requis' });
@@ -38,7 +40,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.patch('/employees/:id', restaurantScope, async (req, res) => {
+  router.patch('/employees/:id', restaurantScope, staffAccess, async (req, res) => {
     try {
       const fields = ['name', 'role', 'phone', 'email', 'hourly_cost', 'is_active'];
       const updates = [];
@@ -66,7 +68,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // ---------- Planning (créneaux) ----------
 
   // GET /api/v1/restaurant/shifts?from=&to=&employee_id=
-  router.get('/shifts', restaurantScope, async (req, res) => {
+  router.get('/shifts', restaurantScope, staffAccess, async (req, res) => {
     const { from, to, employee_id } = req.query;
     const conditions = ['s.restaurant_id = $1'];
     const params = [req.scopedRestaurantId];
@@ -86,7 +88,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     res.json({ data: result.rows });
   });
 
-  router.post('/shifts', restaurantScope, async (req, res) => {
+  router.post('/shifts', restaurantScope, staffAccess, async (req, res) => {
     try {
       const { employee_id, starts_at, ends_at, note } = req.body;
       if (!employee_id || !starts_at || !ends_at) {
@@ -109,7 +111,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.patch('/shifts/:id', restaurantScope, async (req, res) => {
+  router.patch('/shifts/:id', restaurantScope, staffAccess, async (req, res) => {
     try {
       const fields = ['starts_at', 'ends_at', 'status', 'note'];
       const updates = [];
@@ -134,7 +136,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  router.delete('/shifts/:id', restaurantScope, async (req, res) => {
+  router.delete('/shifts/:id', restaurantScope, staffAccess, async (req, res) => {
     const result = await pool.query(
       'DELETE FROM shifts WHERE id = $1 AND restaurant_id = $2 RETURNING id',
       [req.params.id, req.scopedRestaurantId]

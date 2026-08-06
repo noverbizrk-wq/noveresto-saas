@@ -14,10 +14,15 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const moduleAccessMiddleware = require('./middleware/module-access-middleware');
+  const ordersAccess = moduleAccessMiddleware(pool, 'orders');
+  const kdsAccess = moduleAccessMiddleware(pool, 'kds');
+  const overviewAccess = moduleAccessMiddleware(pool, 'overview');
+
   // ---------- Commandes ----------
 
   // GET /api/v1/restaurant/orders?restaurant_id=&status=&channel_id=&page=&limit=
-  router.get('/orders', restaurantScope, async (req, res) => {
+  router.get('/orders', restaurantScope, ordersAccess, async (req, res) => {
     try {
       const { status, channel_id, page = 1, limit = 50 } = req.query;
       const restaurantId = req.scopedRestaurantId;
@@ -51,7 +56,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // GET /api/v1/restaurant/orders/:id?restaurant_id=
   // Note : restaurant_id doit être fourni en query pour que restaurantScope
   // vérifie les droits AVANT de révéler le contenu de la commande.
-  router.get('/orders/:id', restaurantScope, async (req, res) => {
+  router.get('/orders/:id', restaurantScope, ordersAccess, async (req, res) => {
     try {
       const order = await pool.query(
         'SELECT * FROM orders WHERE id = $1 AND restaurant_id = $2',
@@ -71,7 +76,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // POST /api/v1/restaurant/orders  (restaurant_id dans le body)
-  router.post('/orders', restaurantScope, async (req, res) => {
+  router.post('/orders', restaurantScope, ordersAccess, async (req, res) => {
     try {
       if (!req.body.items || req.body.items.length === 0) {
         return res.status(400).json({ error: 'La commande doit contenir au moins un article' });
@@ -88,7 +93,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // PATCH /api/v1/restaurant/orders/:id/status  { restaurant_id, status, reason }
-  router.patch('/orders/:id/status', restaurantScope, async (req, res) => {
+  router.patch('/orders/:id/status', restaurantScope, ordersAccess, async (req, res) => {
     try {
       const { status, reason } = req.body;
       if (!status) return res.status(400).json({ error: 'status requis' });
@@ -113,7 +118,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   // ---------- KDS ----------
 
-  router.get('/kds/queue', restaurantScope, async (req, res) => {
+  router.get('/kds/queue', restaurantScope, kdsAccess, async (req, res) => {
     try {
       const queue = await ordersService.getKdsQueue(pool, req.scopedRestaurantId);
       res.json({ data: queue });
@@ -124,7 +129,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   // ---------- Dashboard ----------
 
-  router.get('/dashboard/summary', restaurantScope, async (req, res) => {
+  router.get('/dashboard/summary', restaurantScope, overviewAccess, async (req, res) => {
     try {
       const { from, to } = req.query;
       if (!from || !to) return res.status(400).json({ error: 'from et to requis' });
@@ -180,6 +185,21 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
           timezone: 'Africa/Tunis'
         }]
       });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/v1/restaurant/my-modules — modules activés pour le compte connecté
+  // (admin = tous les modules, cf. moduleAccessService.ALL_MODULES)
+  router.get('/my-modules', async (req, res) => {
+    try {
+      const moduleAccessService = require('./services/module-access-service');
+      if (req.user?.role === 'admin') {
+        return res.json({ data: moduleAccessService.ALL_MODULES.map(m => m.key) });
+      }
+      const modules = await moduleAccessService.getUserModules(pool, req.user.id);
+      res.json({ data: modules });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

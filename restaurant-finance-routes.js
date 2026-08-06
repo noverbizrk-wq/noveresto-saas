@@ -9,8 +9,10 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   router.use(authMiddleware);
 
+  const financeAccess = require('./middleware/module-access-middleware')(pool, 'finance');
+
   // GET /api/v1/restaurant/finance/vat-breakdown?from=&to=
-  router.get('/finance/vat-breakdown', restaurantScope, async (req, res) => {
+  router.get('/finance/vat-breakdown', restaurantScope, financeAccess, async (req, res) => {
     try {
       const { from, to } = req.query;
       if (!from || !to) return res.status(400).json({ error: 'from et to requis' });
@@ -22,7 +24,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // GET /api/v1/restaurant/finance/channel-breakdown?from=&to=
-  router.get('/finance/channel-breakdown', restaurantScope, async (req, res) => {
+  router.get('/finance/channel-breakdown', restaurantScope, financeAccess, async (req, res) => {
     try {
       const { from, to } = req.query;
       if (!from || !to) return res.status(400).json({ error: 'from et to requis' });
@@ -34,7 +36,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   });
 
   // GET /api/v1/restaurant/finance/export.csv?from=&to=
-  router.get('/finance/export.csv', restaurantScope, async (req, res) => {
+  router.get('/finance/export.csv', restaurantScope, financeAccess, async (req, res) => {
     try {
       const { from, to } = req.query;
       if (!from || !to) return res.status(400).json({ error: 'from et to requis' });
