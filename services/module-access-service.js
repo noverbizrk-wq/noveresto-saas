@@ -14,6 +14,7 @@ const ALL_MODULES = [
   { key: 'disputes',  label: 'Litiges' },
   { key: 'finance',   label: 'Finance et TVA' },
   { key: 'copilot',   label: 'Copilote IA' },
+  { key: 'prospection', label: 'Prospection' },
 ];
 
 const VALID_KEYS = new Set(ALL_MODULES.map(m => m.key));
