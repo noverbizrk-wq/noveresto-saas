@@ -65,6 +65,19 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
+  // GET /api/v1/restaurant/prospection/export.csv?tier=&status=
+  router.get('/prospection/export.csv', restaurantScope, prospectionAccess, async (req, res) => {
+    try {
+      const { tier, status } = req.query;
+      const csv = await prospectionService.exportProspectsCsv(pool, req.scopedRestaurantId, { tier, status });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="prospects_${new Date().toISOString().slice(0,10)}.csv"`);
+      res.send(csv);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // PATCH /api/v1/restaurant/prospection/:id  { status, notes, contact_name, next_action_date }
   router.patch('/prospection/:id', restaurantScope, prospectionAccess, async (req, res) => {
     try {

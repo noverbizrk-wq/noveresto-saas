@@ -47,7 +47,7 @@ const CATEGORY_TO_GOOGLE_TYPE = {
 };
 
 async function fetchPlaceDetails(placeId, apiKey) {
-  const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_phone_number,website,rating,user_ratings_total,formatted_address,geometry&language=fr&key=${apiKey}`;
+  const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,formatted_address,geometry&language=fr&key=${apiKey}`;
   const detailRes = await fetch(detailUrl);
   const detailData = await detailRes.json();
   return detailData.result || {};
@@ -63,6 +63,7 @@ async function enrichResults(results, apiKey) {
         name: d.name || place.name,
         address: d.formatted_address || place.formatted_address || place.vicinity,
         phone: d.formatted_phone_number || null,
+        phone_international: d.international_phone_number || null,
         website: d.website || null,
         rating: d.rating ?? place.rating ?? null,
         review_count: d.user_ratings_total ?? place.user_ratings_total ?? 0,
@@ -75,6 +76,7 @@ async function enrichResults(results, apiKey) {
         name: place.name,
         address: place.formatted_address || place.vicinity,
         phone: null,
+        phone_international: null,
         website: null,
         rating: place.rating ?? null,
         review_count: place.user_ratings_total ?? 0,
@@ -156,15 +158,16 @@ async function searchAndSaveProspects(pool, restaurantId, { zoneLabel, category,
 
     const result = await pool.query(
       `INSERT INTO prospects
-        (restaurant_id, google_place_id, name, address, phone, website, rating, review_count,
+        (restaurant_id, google_place_id, name, address, phone, phone_international, website, rating, review_count,
          latitude, longitude, category, zone_label, opportunity_tier)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        ON CONFLICT (restaurant_id, google_place_id) DO UPDATE SET
          name = EXCLUDED.name, address = EXCLUDED.address, phone = EXCLUDED.phone,
+         phone_international = EXCLUDED.phone_international,
          website = EXCLUDED.website, rating = EXCLUDED.rating, review_count = EXCLUDED.review_count,
          opportunity_tier = EXCLUDED.opportunity_tier
        RETURNING *`,
-      [restaurantId, p.google_place_id, p.name, p.address, p.phone, p.website, p.rating,
+      [restaurantId, p.google_place_id, p.name, p.address, p.phone, p.phone_international, p.website, p.rating,
        p.review_count, p.latitude, p.longitude, category, zoneLabel, tier]
     );
     saved.push(result.rows[0]);
@@ -259,4 +262,32 @@ async function listInteractions(pool, prospectId, restaurantId) {
   return result.rows;
 }
 
-module.exports = { computeOpportunityTier, searchPlaces, searchAndSaveProspects, listProspects, updateProspectStatus, addInteraction, listInteractions };
+/**
+ * Export CSV des prospects (même convention que le module Finance :
+ * BOM UTF-8 pour compatibilité Excel). Filtrable par palier/statut,
+ * mêmes paramètres que listProspects.
+ */
+async function exportProspectsCsv(pool, restaurantId, { tier, status } = {}) {
+  const prospects = await listProspects(pool, restaurantId, { tier, status });
+
+  const header = 'Nom,Adresse,Téléphone,Site web,Note,Nb avis,Catégorie,Zone,Palier,Statut,Contact,Date de relance,Notes';
+  const escape = (v) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+  const tierLabels = { invisible: 'Invisible', presence_faible: 'Présence faible', etabli: 'Établi' };
+  const statusLabels = { nouveau: 'Nouveau', contacte: 'Contacté', qualifie: 'Qualifié', rejete: 'Rejeté' };
+
+  const rows = prospects.map(p => [
+    p.name, p.address, p.phone, p.website, p.rating, p.review_count,
+    p.category, p.zone_label, tierLabels[p.opportunity_tier] || p.opportunity_tier,
+    statusLabels[p.status] || p.status, p.contact_name,
+    p.next_action_date ? new Date(p.next_action_date).toLocaleDateString('fr-FR') : '',
+    p.notes
+  ].map(escape).join(','));
+
+  return '\uFEFF' + [header, ...rows].join('\n');
+}
+
+module.exports = { computeOpportunityTier, searchPlaces, searchAndSaveProspects, listProspects, updateProspectStatus, addInteraction, listInteractions, exportProspectsCsv };
