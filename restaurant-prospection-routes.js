@@ -65,12 +65,33 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
-  // PATCH /api/v1/restaurant/prospection/:id  { status, notes }
+  // PATCH /api/v1/restaurant/prospection/:id  { status, notes, contact_name, next_action_date }
   router.patch('/prospection/:id', restaurantScope, prospectionAccess, async (req, res) => {
     try {
-      const { status, notes } = req.body;
-      const updated = await prospectionService.updateProspectStatus(pool, req.params.id, req.scopedRestaurantId, { status, notes });
+      const { status, notes, contact_name, next_action_date } = req.body;
+      const updated = await prospectionService.updateProspectStatus(pool, req.params.id, req.scopedRestaurantId, { status, notes, contact_name, next_action_date });
       res.json(updated);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/v1/restaurant/prospection/:id/interactions
+  router.get('/prospection/:id/interactions', restaurantScope, prospectionAccess, async (req, res) => {
+    try {
+      const data = await prospectionService.listInteractions(pool, req.params.id, req.scopedRestaurantId);
+      res.json({ data });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/v1/restaurant/prospection/:id/interactions  { note }
+  router.post('/prospection/:id/interactions', restaurantScope, prospectionAccess, async (req, res) => {
+    try {
+      const { note } = req.body;
+      const created = await prospectionService.addInteraction(pool, req.params.id, req.scopedRestaurantId, { note, userId: req.user?.id });
+      res.json(created);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }

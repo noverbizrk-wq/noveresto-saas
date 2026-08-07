@@ -197,12 +197,14 @@ async function listProspects(pool, restaurantId, { tier, status } = {}) {
   return result.rows;
 }
 
-async function updateProspectStatus(pool, id, restaurantId, { status, notes }) {
+async function updateProspectStatus(pool, id, restaurantId, { status, notes, contact_name, next_action_date }) {
   const updates = [];
   const params = [];
   let idx = 1;
   if (status !== undefined) { updates.push(`status = $${idx++}`); params.push(status); }
   if (notes !== undefined) { updates.push(`notes = $${idx++}`); params.push(notes); }
+  if (contact_name !== undefined) { updates.push(`contact_name = $${idx++}`); params.push(contact_name); }
+  if (next_action_date !== undefined) { updates.push(`next_action_date = $${idx++}`); params.push(next_action_date || null); }
   if (updates.length === 0) {
     const err = new Error('Aucun champ à mettre à jour');
     err.statusCode = 400;
@@ -221,4 +223,40 @@ async function updateProspectStatus(pool, id, restaurantId, { status, notes }) {
   return result.rows[0];
 }
 
-module.exports = { computeOpportunityTier, searchPlaces, searchAndSaveProspects, listProspects, updateProspectStatus };
+/**
+ * Ajoute une entrée à l'historique d'un prospect (appel, visite, note
+ * libre...). Vérifie d'abord que le prospect appartient bien au compte
+ * (protection IDOR), avant d'insérer.
+ */
+async function addInteraction(pool, prospectId, restaurantId, { note, userId }) {
+  if (!note || !note.trim()) {
+    const err = new Error('note requise');
+    err.statusCode = 400;
+    throw err;
+  }
+  const owned = await pool.query(
+    'SELECT 1 FROM prospects WHERE id = $1 AND restaurant_id = $2',
+    [prospectId, restaurantId]
+  );
+  if (owned.rows.length === 0) {
+    const err = new Error('Prospect introuvable');
+    err.statusCode = 404;
+    throw err;
+  }
+  const result = await pool.query(
+    `INSERT INTO prospect_interactions (prospect_id, restaurant_id, note, created_by)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [prospectId, restaurantId, note.trim(), userId || null]
+  );
+  return result.rows[0];
+}
+
+async function listInteractions(pool, prospectId, restaurantId) {
+  const result = await pool.query(
+    `SELECT * FROM prospect_interactions WHERE prospect_id = $1 AND restaurant_id = $2 ORDER BY created_at DESC`,
+    [prospectId, restaurantId]
+  );
+  return result.rows;
+}
+
+module.exports = { computeOpportunityTier, searchPlaces, searchAndSaveProspects, listProspects, updateProspectStatus, addInteraction, listInteractions };
