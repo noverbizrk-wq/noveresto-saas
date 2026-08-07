@@ -22,20 +22,31 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
 
   const prospectionAccess = require('./middleware/module-access-middleware')(pool, 'prospection');
 
-  // POST /api/v1/restaurant/prospection/search  { zone_label, category }
+  // POST /api/v1/restaurant/prospection/search
+  // Mode texte : { zone_label, category }
+  // Mode carte : { latitude, longitude, radius_km, category, zone_label? }
   router.post('/prospection/search', searchLimiter, restaurantScope, prospectionAccess, async (req, res) => {
     try {
-      const { zone_label, category } = req.body;
-      if (!zone_label || !zone_label.trim()) {
-        return res.status(400).json({ error: 'zone_label requis' });
+      const { zone_label, category, latitude, longitude, radius_km } = req.body;
+      const isNearbyMode = latitude !== undefined && longitude !== undefined;
+
+      if (!isNearbyMode && (!zone_label || !zone_label.trim())) {
+        return res.status(400).json({ error: 'zone_label requis (ou latitude/longitude pour une recherche par carte)' });
+      }
+      if (isNearbyMode && (typeof latitude !== 'number' || typeof longitude !== 'number')) {
+        return res.status(400).json({ error: 'latitude et longitude doivent être numériques' });
       }
       if (!category || !category.trim()) {
         return res.status(400).json({ error: 'category requis' });
       }
+
       const results = await prospectionService.searchAndSaveProspects(pool, req.scopedRestaurantId, {
-        zoneLabel: zone_label.trim(),
+        zoneLabel: zone_label ? zone_label.trim() : `Carte (${latitude.toFixed(3)}, ${longitude.toFixed(3)}) ±${radius_km || 3}km`,
         category: category.trim(),
-        userId: req.user?.id
+        userId: req.user?.id,
+        latitude: isNearbyMode ? latitude : undefined,
+        longitude: isNearbyMode ? longitude : undefined,
+        radiusKm: isNearbyMode ? (radius_km || 3) : undefined,
       });
       res.json({ data: results });
     } catch (err) {
