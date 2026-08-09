@@ -225,6 +225,7 @@ const restaurantDisputesRoutes = require('./restaurant-disputes-routes')(pool, a
 const restaurantFinanceRoutes = require('./restaurant-finance-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const restaurantCopilotRoutes = require('./restaurant-copilot-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const restaurantProspectionRoutes = require('./restaurant-prospection-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+const publicDiagnosticRoutes = require('./public-diagnostic-routes')(pool)
 app.use('/api/v1/restaurant', restaurantOrdersRoutes)
 app.use('/api/v1/restaurant', restaurantMenuRoutes)
 app.use('/api/v1/restaurant', restaurantCostingRoutes)
@@ -234,6 +235,7 @@ app.use('/api/v1/restaurant', restaurantDisputesRoutes)
 app.use('/api/v1/restaurant', restaurantFinanceRoutes)
 app.use('/api/v1/restaurant', restaurantCopilotRoutes)
 app.use('/api/v1/restaurant', restaurantProspectionRoutes)
+app.use('/api/v1/public', publicDiagnosticRoutes)
 
 const PORT = 3000
 app.listen(PORT, () => {
