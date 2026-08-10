@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const prospectionService = require('./services/prospection-service');
+const pitchService = require('./services/prospect-pitch-service');
 
 // Recherche = appels Google Places facturés (coût réel par requête) —
 // limite dédiée, plus stricte que les endpoints internes.
@@ -12,6 +13,15 @@ const searchLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 10,
   message: { error: 'Trop de recherches de prospection. Patientez quelques minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Génération de pitch = appel Claude API facturé — limite dédiée.
+const pitchLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: { error: 'Trop de générations de message. Patientez une minute.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -51,6 +61,22 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
       res.json({ data: results });
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/v1/restaurant/prospects/:id/pitch — génère un message WhatsApp personnalisé via IA
+  router.post('/prospects/:id/pitch', pitchLimiter, restaurantScope, prospectionAccess, async (req, res) => {
+    try {
+      const prospects = await prospectionService.listProspects(pool, req.scopedRestaurantId, {});
+      const prospect = prospects.find(p => p.id === Number(req.params.id));
+      if (!prospect) return res.status(404).json({ error: 'Prospect introuvable' });
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(503).json({ error: 'Génération de pitch non configurée (clé API manquante)' });
+      }
+      const message = await pitchService.generatePitch(prospect);
+      res.json({ message });
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: 'La génération a échoué. ' + err.message });
     }
   });
 

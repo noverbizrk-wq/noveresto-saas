@@ -161,6 +161,8 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // alimenter le sélecteur frontend.
   router.get('/context', async (req, res) => {
     try {
+      const { currencyForCountry, timezoneForCountry } = require('./lib/currency');
+
       if (req.user?.role === 'admin') {
         const result = await pool.query(
           `SELECT id, name, restaurant AS restaurant_name, country
@@ -170,19 +172,27 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
           data: result.rows.map(r => ({
             id: r.id,
             name: r.restaurant_name || r.name,
-            currency: 'TND',
-            timezone: 'Africa/Tunis'
+            country: r.country || null,
+            currency: currencyForCountry(r.country),
+            timezone: timezoneForCountry(r.country)
           }))
         });
       }
-      // Compte standard : son propre "restaurant" = ses propres infos JWT,
-      // pas besoin de requête DB supplémentaire.
+      // Compte standard : lookup DB nécessaire (le JWT ne contient pas
+      // `country` — évite de dépendre d'une valeur figée au moment du
+      // login si le compte est mis à jour depuis).
+      const result = await pool.query(
+        `SELECT restaurant, name, country FROM users WHERE id = $1`,
+        [req.user.id]
+      );
+      const u = result.rows[0] || {};
       res.json({
         data: [{
           id: req.user.id,
-          name: req.user.restaurant || req.user.name,
-          currency: 'TND',
-          timezone: 'Africa/Tunis'
+          name: u.restaurant || u.name || req.user.restaurant || req.user.name,
+          country: u.country || null,
+          currency: currencyForCountry(u.country),
+          timezone: timezoneForCountry(u.country)
         }]
       });
     } catch (err) {
