@@ -139,16 +139,6 @@ app.get('/api/v1/dashboard', authMiddleware, (req, res) => {
   })
 })
 
-app.get('/api/v1/stocks', authMiddleware, (req, res) => {
-  res.json({ valuation_tnd: 4280, items: [
-    { name: 'Boeuf hache halal',  qty: 1.2, unit: 'kg',      status: 'RUPTURE',   pct: 8  },
-    { name: 'Pain burger',        qty: 48,  unit: 'pcs',     status: 'CRITIQUE',  pct: 22 },
-    { name: 'Poulet filet',       qty: 4.5, unit: 'kg',      status: 'DLC_ALERT', pct: 35 },
-    { name: 'Frites surgelees',   qty: 12,  unit: 'kg',      status: 'OK',        pct: 60 },
-    { name: 'Coca-Cola 33cl',     qty: 8,   unit: 'caisses', status: 'OK',        pct: 80 }
-  ]})
-})
-
 app.get('/api/v1/forecasts', authMiddleware, async (req, res) => {
   const horizon = parseInt(req.query.horizon || '14')
   const restaurant_id = req.user.id || 1
@@ -171,14 +161,6 @@ app.get('/api/v1/forecasts', authMiddleware, async (req, res) => {
       generated_at: data.generated_at,
     })
   } catch(e) { res.status(500).json({ error: 'Erreur Prophet ML: ' + e.message }) }
-})
-
-app.get('/api/v1/orders', authMiddleware, (req, res) => {
-  res.json({ orders: [
-    { id: 'ORD-001', supplier: 'Metro Tunisie',  status: 'DRAFT',     total: 1240 },
-    { id: 'ORD-002', supplier: 'Delice Holding', status: 'SENT',      total: 380  },
-    { id: 'ORD-003', supplier: 'Bonpain',        status: 'CONFIRMED', total: 220  }
-  ]})
 })
 
 app.post('/api/v1/import/csv', authMiddleware, async (req, res) => {
