@@ -68,23 +68,27 @@ async function fetchGoogleReviews(placeId, apiKey) {
 // ── META GRAPH API (Facebook Page Reviews) ────────────────────────────────────
 
 async function fetchFacebookReviews(pageId, accessToken) {
-  // Ratings summary
-  const summaryUrl = `https://graph.facebook.com/v20.0/${pageId}?fields=name,overall_star_rating,rating_count&access_token=${accessToken}`
-  const summaryRes = await fetch(summaryUrl)
-  const summary    = await summaryRes.json()
-  if (summary.error) throw new Error(`Facebook API: ${summary.error.message}`)
-
-  // Reviews list
-  const reviewsUrl = `https://graph.facebook.com/v20.0/${pageId}/ratings?fields=reviewer{name,pic},rating,review_text,created_time&limit=20&access_token=${accessToken}`
+  // Reviews list — overall_star_rating/rating_count ont été dépréciés par
+  // Meta pour les pages passées à la "New Pages Experience" (quasi toutes
+  // désormais) : https://developers.facebook.com/community/threads/821885815292926
+  // On calcule la moyenne nous-mêmes à partir des avis individuels plutôt
+  // que de dépendre d'un champ que Meta peut retirer.
+  const reviewsUrl = `https://graph.facebook.com/v20.0/${pageId}/ratings?fields=reviewer{name,pic},rating,review_text,created_time&limit=25&access_token=${accessToken}`
   const reviewsRes = await fetch(reviewsUrl)
   const reviewsData = await reviewsRes.json()
+  if (reviewsData.error) throw new Error(`Facebook API: ${reviewsData.error.message}`)
+
+  const items = reviewsData.data || []
+  const ratingsOnly = items.filter(rv => typeof rv.rating === 'number')
+  const avgRating = ratingsOnly.length > 0
+    ? ratingsOnly.reduce((sum, rv) => sum + rv.rating, 0) / ratingsOnly.length
+    : null
 
   return {
     platform: 'facebook',
-    name:     summary.name,
-    rating:   summary.overall_star_rating,
-    total:    summary.rating_count,
-    reviews:  (reviewsData.data || []).map(rv => ({
+    rating:   avgRating,
+    total:    items.length,
+    reviews:  items.map(rv => ({
       id:        `fb_${rv.id || rv.created_time}`,
       platform:  'facebook',
       author:    rv.reviewer?.name || 'Anonyme',
