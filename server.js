@@ -14,7 +14,17 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'https://noveresto.app',
   credentials: true
 }))
-app.use(express.json())
+// Le webhook Deliveroo a besoin du corps BRUT (non parsé) pour vérifier
+// la signature HMAC — parsing conditionnel pour ne jamais consommer le
+// flux deux fois (express.json() puis express.raw() sur la même requête
+// casserait silencieusement la vérification de signature).
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/v1/webhooks/deliveroo/orders') {
+    express.raw({ type: 'application/json' })(req, res, next)
+  } else {
+    express.json()(req, res, next)
+  }
+})
 
 // AUDIT SÉCURITÉ : plus de secret par défaut — le serveur refuse de démarrer
 // si JWT_SECRET est absent ou trop court. Générer avec :
@@ -209,6 +219,7 @@ const restaurantCopilotRoutes = require('./restaurant-copilot-routes')(pool, aut
 const restaurantProspectionRoutes = require('./restaurant-prospection-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const publicDiagnosticRoutes = require('./public-diagnostic-routes')(pool)
 const restaurantTeifRoutes = require('./restaurant-teif-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+const { webhookRouter: deliverooWebhookRouter, manageRouter: deliverooManageRouter } = require('./deliveroo-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 app.use('/api/v1/restaurant', restaurantOrdersRoutes)
 app.use('/api/v1/restaurant', restaurantMenuRoutes)
 app.use('/api/v1/restaurant', restaurantCostingRoutes)
@@ -220,6 +231,8 @@ app.use('/api/v1/restaurant', restaurantCopilotRoutes)
 app.use('/api/v1/restaurant', restaurantProspectionRoutes)
 app.use('/api/v1/public', publicDiagnosticRoutes)
 app.use('/api/v1/restaurant', restaurantTeifRoutes)
+app.use('/api/v1/webhooks', deliverooWebhookRouter)
+app.use('/api/v1/restaurant', deliverooManageRouter)
 
 const PORT = 3000
 app.listen(PORT, () => {
