@@ -220,6 +220,7 @@ const restaurantProspectionRoutes = require('./restaurant-prospection-routes')(p
 const publicDiagnosticRoutes = require('./public-diagnostic-routes')(pool)
 const restaurantTeifRoutes = require('./restaurant-teif-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const { webhookRouter: deliverooWebhookRouter, manageRouter: deliverooManageRouter } = require('./deliveroo-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+const { webhookRouter: glovoWebhookRouter, manageRouter: glovoManageRouter } = require('./glovo-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 app.use('/api/v1/restaurant', restaurantOrdersRoutes)
 app.use('/api/v1/restaurant', restaurantMenuRoutes)
 app.use('/api/v1/restaurant', restaurantCostingRoutes)
@@ -233,6 +234,8 @@ app.use('/api/v1/public', publicDiagnosticRoutes)
 app.use('/api/v1/restaurant', restaurantTeifRoutes)
 app.use('/api/v1/webhooks', deliverooWebhookRouter)
 app.use('/api/v1/restaurant', deliverooManageRouter)
+app.use('/api/v1/webhooks', glovoWebhookRouter)
+app.use('/api/v1/restaurant', glovoManageRouter)
 
 const PORT = 3000
 app.listen(PORT, () => {
