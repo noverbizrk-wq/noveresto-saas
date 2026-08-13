@@ -178,6 +178,32 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
           }))
         });
       }
+
+      // franchise_owner : restaurants de SA SEULE organisation (pas tous
+      // les comptes comme admin). Lookup DB, pas le JWT — cf. le
+      // commentaire de securite dans restaurant-scope-middleware.js sur
+      // le risque d'un organization_id perime dans un vieux token.
+      if (req.user?.role === 'franchise_owner') {
+        const result = await pool.query(
+          `SELECT target.id, target.name, target.restaurant AS restaurant_name, target.country
+           FROM users target
+           JOIN users owner ON owner.id = $1
+           WHERE target.organization_id = owner.organization_id
+             AND target.organization_id IS NOT NULL
+             AND target.role = 'client'
+           ORDER BY target.id`,
+          [req.user.id]
+        );
+        return res.json({
+          data: result.rows.map(r => ({
+            id: r.id,
+            name: r.restaurant_name || r.name,
+            country: r.country || null,
+            currency: currencyForCountry(r.country),
+            timezone: timezoneForCountry(r.country)
+          }))
+        });
+      }
       // Compte standard : lookup DB nécessaire (le JWT ne contient pas
       // `country` — évite de dépendre d'une valeur figée au moment du
       // login si le compte est mis à jour depuis).

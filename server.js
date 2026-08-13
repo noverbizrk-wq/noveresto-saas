@@ -70,7 +70,7 @@ app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
     const user = rows[0]
     if (!user || !bcrypt.compareSync(password, user.password))
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
-    const payload = { id: user.id, email: user.email, role: user.role, name: user.name, restaurant: user.restaurant }
+    const payload = { id: user.id, email: user.email, role: user.role, name: user.name, restaurant: user.restaurant, organization_id: user.organization_id }
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
     res.json({ token, user: payload })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
@@ -126,6 +126,8 @@ app.get('/api/v1/admin/contacts', authMiddleware, adminOnly, async (req, res) =>
 
 const adminModuleAccessRoutes = require('./admin-module-access-routes')(pool)
 app.use('/api/v1/admin', authMiddleware, adminOnly, adminModuleAccessRoutes)
+const adminOrganizationsRoutes = require('./admin-organizations-routes')(pool)
+app.use('/api/v1/admin', authMiddleware, adminOnly, adminOrganizationsRoutes)
 
 app.get('/api/v1/health', async (req, res) => {
   try {
@@ -207,7 +209,7 @@ app.use('/api/v1/reputation', authMiddleware, (req, res, next) => { req.pool = p
 const socialRoutes = require('./social-routes')
 app.use('/api/v1/social', authMiddleware, socialRoutes)
 
-const restaurantScopeMiddleware = require('./middleware/restaurant-scope-middleware')
+const restaurantScopeMiddleware = require('./middleware/restaurant-scope-middleware')(pool)
 const restaurantOrdersRoutes = require('./restaurant-orders-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const restaurantMenuRoutes = require('./restaurant-menu-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const restaurantCostingRoutes = require('./restaurant-costing-routes')(pool, authMiddleware, restaurantScopeMiddleware)
