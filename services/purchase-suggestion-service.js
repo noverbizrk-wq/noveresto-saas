@@ -105,9 +105,9 @@ async function validateSuggestion(pool, restaurantId, suggestionId, userId, adju
   const unitCost = ingRes.rows.length > 0 ? Number(ingRes.rows[0].unit_cost) : 0;
 
   const poResult = await pool.query(
-    `INSERT INTO purchase_orders (restaurant_id, supplier_id, status, created_by)
-     VALUES ($1, $2, 'draft', $3) RETURNING id`,
-    [restaurantId, sugg.supplier_id, userId]
+    `INSERT INTO purchase_orders (restaurant_id, supplier_id, status, created_by, total_amount)
+     VALUES ($1, $2, 'draft', $3, $4) RETURNING id`,
+    [restaurantId, sugg.supplier_id, userId, finalQuantity * unitCost]
   );
   const purchaseOrderId = poResult.rows[0].id;
 
