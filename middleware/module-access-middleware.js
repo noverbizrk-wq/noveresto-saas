@@ -21,7 +21,7 @@ function moduleAccessMiddleware(pool, moduleKey) {
     try {
       const result = await pool.query(
         'SELECT 1 FROM module_access WHERE user_id = $1 AND module_key = $2',
-        [req.user.id, moduleKey]
+        [req.scopedRestaurantId ?? req.user.id, moduleKey]
       );
       if (result.rows.length === 0) {
         return res.status(403).json({ error: `Accès au module "${moduleKey}" non autorisé pour ce compte` });
