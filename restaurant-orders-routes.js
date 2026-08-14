@@ -166,7 +166,7 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
       if (req.user?.role === 'admin') {
         const result = await pool.query(
           `SELECT id, name, restaurant AS restaurant_name, country
-           FROM users WHERE role != 'admin' ORDER BY id`
+           FROM users WHERE role = 'client' ORDER BY id`
         );
         return res.json({
           data: result.rows.map(r => ({
