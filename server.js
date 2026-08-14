@@ -128,6 +128,8 @@ const adminModuleAccessRoutes = require('./admin-module-access-routes')(pool)
 app.use('/api/v1/admin', authMiddleware, adminOnly, adminModuleAccessRoutes)
 const adminOrganizationsRoutes = require('./admin-organizations-routes')(pool)
 app.use('/api/v1/admin', authMiddleware, adminOnly, adminOrganizationsRoutes)
+const adminOverviewRoutes = require('./admin-overview-routes')(pool)
+app.use('/api/v1/admin', authMiddleware, adminOnly, adminOverviewRoutes)
 
 app.get('/api/v1/health', async (req, res) => {
   try {
@@ -151,9 +153,9 @@ app.get('/api/v1/dashboard', authMiddleware, (req, res) => {
   })
 })
 
-app.get('/api/v1/forecasts', authMiddleware, async (req, res) => {
+app.get('/api/v1/forecasts', authMiddleware, require('./middleware/restaurant-scope-middleware')(pool), async (req, res) => {
   const horizon = parseInt(req.query.horizon || '14')
-  const restaurant_id = req.user.id || 1
+  const restaurant_id = req.scopedRestaurantId
   try {
     const r = await fetch('http://localhost:5000/forecast', {
       method: 'POST',
