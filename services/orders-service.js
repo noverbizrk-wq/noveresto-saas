@@ -6,6 +6,7 @@
 
 const { logAction } = require('./audit-log-service');
 const { deductStockForOrder } = require('./stock-service');
+const { findOrCreateCustomer, awardPointsForOrder } = require('./loyalty-service');
 
 const VALID_STATUSES = [
   'new', 'to_validate', 'accepted', 'in_preparation', 'ready',
@@ -56,19 +57,32 @@ async function createOrder(pool, payload) {
       (sum, it) => sum + Number(it.unit_price) * Number(it.quantity), 0
     );
 
+    // Fidelisation : rattachement optionnel a un client (telephone saisi
+    // par le staff). Best-effort, la commande ne doit jamais echouer pour
+    // un probleme de fidelisation.
+    let customerId = null;
+    if (payload.customer_phone) {
+      try {
+        const customer = await findOrCreateCustomer(pool, payload.restaurant_id, payload.customer_phone, payload.customer_name);
+        customerId = customer.id;
+      } catch (err) {
+        console.error('[orders-service] echec rattachement client fidelite:', err.message);
+      }
+    }
+
     const orderRes = await client.query(
       `INSERT INTO orders
         (restaurant_id, channel_id, delivery_platform_id, external_order_ref,
          status, promised_at, gross_amount, discount_amount, commission_amount,
-         payment_method, customer_note, allergen_flags, created_by)
-       VALUES ($1,$2,$3,$4,'new',$5,$6,$7,$8,$9,$10,$11,$12)
+         payment_method, customer_note, allergen_flags, created_by, customer_id)
+       VALUES ($1,$2,$3,$4,'new',$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING *`,
       [
         payload.restaurant_id, payload.channel_id, payload.delivery_platform_id || null,
         payload.external_order_ref || null, payload.promised_at || null,
         grossAmount, payload.discount_amount || 0, payload.commission_amount || 0,
         payload.payment_method || null, payload.customer_note || null,
-        payload.allergen_flags || null, payload.created_by || null
+        payload.allergen_flags || null, payload.created_by || null, customerId
       ]
     );
     const order = orderRes.rows[0];
@@ -136,6 +150,16 @@ async function changeOrderStatus(pool, orderId, toStatus, { changedBy, reason, r
         restaurantId: restaurantId || current.rows[0].restaurant_id,
         userId: changedBy
       });
+      // Fidelisation (Phase A) : credit des points si la commande est
+      // rattachee a un client. Best-effort, meme pattern que le stock.
+      if (updated.rows[0].customer_id) {
+        await awardPointsForOrder(
+          pool, orderId,
+          restaurantId || current.rows[0].restaurant_id,
+          updated.rows[0].customer_id,
+          updated.rows[0].gross_amount
+        );
+      }
     }
 
     if (AUDITED_STATUSES.has(toStatus)) {
