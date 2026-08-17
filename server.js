@@ -307,7 +307,7 @@ app.post('/api/v1/import/csv', authMiddleware, async (req, res) => {
 })
 
 const reputationRoutes = require('./reputation-routes')
-app.use('/api/v1/reputation', authMiddleware, restaurantScopeMiddleware, (req, res, next) => { req.pool = pool; next() }, reputationRoutes)
+app.use('/api/v1/reputation', authMiddleware, require('./middleware/restaurant-scope-middleware')(pool), (req, res, next) => { req.pool = pool; next() }, reputationRoutes)
 
 const socialRoutes = require('./social-routes')
 app.use('/api/v1/social', authMiddleware, socialRoutes)
