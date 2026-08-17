@@ -138,19 +138,107 @@ app.get('/api/v1/health', async (req, res) => {
   } catch(e) { res.status(500).json({ status: 'error', db: 'disconnected' }) }
 })
 
-app.get('/api/v1/dashboard', authMiddleware, (req, res) => {
-  res.json({
-    restaurant: req.user.restaurant, user: req.user.name, role: req.user.role,
-    date: new Date().toLocaleDateString('fr-FR'),
-    kpis: { revenue_today_tnd: 12480, covers: 247, food_cost_pct: 31.2, avg_ticket_tnd: 50.5 },
-    alerts: [
-      { severity: 'critical', title: 'Rupture: Boeuf hache',   detail: '1.2 kg restant' },
-      { severity: 'warning',  title: 'DLC 36h: Poulet filet', detail: '4.5 kg' },
-      { severity: 'info',     title: 'Commande auto prete',    detail: 'Metro TN - 1 840 TND' }
-    ],
-    chart: [9800, 11200, 10500, 12100, 13800, 14200, 12480],
-    labels: ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
-  })
+app.get('/api/v1/dashboard', authMiddleware, require('./middleware/restaurant-scope-middleware')(pool), async (req, res) => {
+  const restaurantId = req.scopedRestaurantId
+  try {
+    const todayRes = await pool.query(
+      `SELECT COALESCE(SUM(gross_amount),0) AS revenue, COUNT(*) AS covers
+       FROM orders WHERE restaurant_id = $1 AND received_at::date = CURRENT_DATE`,
+      [restaurantId]
+    )
+    const revenueToday = Number(todayRes.rows[0].revenue)
+    const covers = Number(todayRes.rows[0].covers)
+    const avgTicket = covers > 0 ? revenueToday / covers : 0
+
+    const costRes = await pool.query(
+      `SELECT COALESCE(SUM(ri.quantity * i.unit_cost * oi.quantity), 0) AS total_cost
+       FROM order_items oi
+       JOIN orders o ON o.id = oi.order_id
+       JOIN recipe_ingredients ri ON ri.menu_item_id = oi.menu_item_id
+       JOIN ingredients i ON i.id = ri.ingredient_id
+       WHERE o.restaurant_id = $1 AND o.received_at::date = CURRENT_DATE AND oi.is_cancelled = false`,
+      [restaurantId]
+    )
+    const totalCost = Number(costRes.rows[0].total_cost)
+    // Denominateur = revenueToday (table orders, deja calcule plus haut) et non
+    // une somme re-derivee via la jointure recipe_ingredients : cette jointure
+    // multiplie les lignes order_items (1 ligne par ingredient de la recette),
+    // ce qui gonflerait artificiellement le CA si on le recalculait ici.
+    const foodCostPct = revenueToday > 0 ? (totalCost / revenueToday) * 100 : 0
+
+    const chartRes = await pool.query(
+      `SELECT received_at::date AS day, SUM(gross_amount) AS revenue
+       FROM orders
+       WHERE restaurant_id = $1 AND received_at >= CURRENT_DATE - INTERVAL '6 days'
+       GROUP BY received_at::date
+       ORDER BY day`,
+      [restaurantId]
+    )
+    const dayLabels = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam']
+    const chartByDate = new Map(chartRes.rows.map(r => {
+      const key = r.day instanceof Date ? r.day.toISOString().slice(0,10) : String(r.day).slice(0,10)
+      return [key, Number(r.revenue)]
+    }))
+    const chart = []
+    const labels = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i)
+      const key = d.toISOString().slice(0,10)
+      chart.push(chartByDate.get(key) || 0)
+      labels.push(dayLabels[d.getDay()])
+    }
+
+    const alerts = []
+    const lowStockRes = await pool.query(
+      `SELECT name, current_stock, unit, min_stock FROM ingredients
+       WHERE restaurant_id = $1 AND current_stock <= min_stock AND min_stock > 0
+       ORDER BY (min_stock - current_stock) DESC LIMIT 3`,
+      [restaurantId]
+    )
+    lowStockRes.rows.forEach(ing => {
+      alerts.push({
+        severity: 'critical',
+        title: `Rupture: ${ing.name}`,
+        detail: `${Number(ing.current_stock).toFixed(1)} ${ing.unit} restant`
+      })
+    })
+
+    const disputesRes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM disputes WHERE restaurant_id = $1 AND status IN ('to_analyze','evidence_needed','contest_prepared','sent')`,
+      [restaurantId]
+    )
+    const openDisputes = Number(disputesRes.rows[0].cnt)
+    if (openDisputes > 0) {
+      alerts.push({ severity: 'warning', title: `${openDisputes} litige(s) ouvert(s)`, detail: 'A traiter dans Litiges' })
+    }
+
+    const suggestionsRes = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM purchase_suggestions WHERE restaurant_id = $1 AND status = 'pending'`,
+      [restaurantId]
+    )
+    const pendingSuggestions = Number(suggestionsRes.rows[0].cnt)
+    if (pendingSuggestions > 0) {
+      alerts.push({ severity: 'info', title: `${pendingSuggestions} suggestion(s) de commande`, detail: 'A valider dans Achats' })
+    }
+
+    res.json({
+      restaurant: req.user.restaurant,
+      user: req.user.name,
+      role: req.user.role,
+      date: new Date().toLocaleDateString('fr-FR'),
+      kpis: {
+        revenue_today_tnd: Math.round(revenueToday),
+        covers,
+        food_cost_pct: Math.round(foodCostPct * 10) / 10,
+        avg_ticket_tnd: Math.round(avgTicket * 10) / 10
+      },
+      alerts,
+      chart,
+      labels
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 app.get('/api/v1/forecasts', authMiddleware, require('./middleware/restaurant-scope-middleware')(pool), async (req, res) => {
