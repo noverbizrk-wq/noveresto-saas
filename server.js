@@ -115,8 +115,21 @@ app.post('/api/v1/contact', async (req, res) => {
 })
 
 app.get('/api/v1/admin/users', authMiddleware, adminOnly, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at FROM users ORDER BY created_at DESC')
+  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, google_place_id, facebook_page_id FROM users ORDER BY created_at DESC')
   res.json({ users: rows, total: rows.length })
+})
+app.patch('/api/v1/admin/users/:id/reputation-config', authMiddleware, adminOnly, async (req, res) => {
+  const { google_place_id, facebook_page_id } = req.body
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET google_place_id = $1, facebook_page_id = $2
+       WHERE id = $3 AND role = 'client'
+       RETURNING id, email, restaurant, google_place_id, facebook_page_id`,
+      [google_place_id || null, facebook_page_id || null, req.params.id]
+    )
+    if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    res.json(rows[0])
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
 app.get('/api/v1/admin/contacts', authMiddleware, adminOnly, async (req, res) => {
@@ -294,7 +307,7 @@ app.post('/api/v1/import/csv', authMiddleware, async (req, res) => {
 })
 
 const reputationRoutes = require('./reputation-routes')
-app.use('/api/v1/reputation', authMiddleware, (req, res, next) => { req.pool = pool; next() }, reputationRoutes)
+app.use('/api/v1/reputation', authMiddleware, restaurantScopeMiddleware, (req, res, next) => { req.pool = pool; next() }, reputationRoutes)
 
 const socialRoutes = require('./social-routes')
 app.use('/api/v1/social', authMiddleware, socialRoutes)

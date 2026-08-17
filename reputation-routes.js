@@ -204,12 +204,22 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
 
 // GET /api/v1/reputation — Récupérer tous les avis (Google + Facebook ou démo)
 router.get('/', async (req, res) => {
-  const restaurantId = req.user.id || 1
+  const restaurantId = req.scopedRestaurantId
   const googleKey    = process.env.GOOGLE_PLACES_API_KEY
-  const googlePlace  = process.env.GOOGLE_PLACE_ID || req.query.place_id
   const fbToken      = process.env.FACEBOOK_ACCESS_TOKEN
-  const fbPage       = process.env.FACEBOOK_PAGE_ID || req.query.page_id
-  const useDemo      = !googleKey && !fbToken
+
+  // Place ID / Page ID stockes PAR RESTAURANT en base, pas en env global
+  // (corrige le bug ou tous les restaurants voyaient les avis du meme
+  // etablissement, celui configure historiquement en env sur le serveur).
+  const configRes = await req.pool.query(
+    'SELECT google_place_id, facebook_page_id FROM users WHERE id = $1',
+    [restaurantId]
+  )
+  const config = configRes.rows[0] || {}
+  const googlePlace = config.google_place_id || req.query.place_id
+  const fbPage       = config.facebook_page_id || req.query.page_id
+
+  const useDemo = (!googleKey || !googlePlace) && (!fbToken || !fbPage)
 
   try {
     let allReviews = []
