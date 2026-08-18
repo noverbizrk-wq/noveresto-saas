@@ -72,6 +72,8 @@ app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
     const user = rows[0]
     if (!user || !bcrypt.compareSync(password, user.password))
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
+    if (user.is_active === false)
+      return res.status(403).json({ error: 'Ce compte a ete desactive. Contactez le support NoveResto.' })
     const payload = { id: user.id, email: user.email, role: user.role, name: user.name, restaurant: user.restaurant, organization_id: user.organization_id }
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
     res.json({ token, user: payload })
@@ -140,8 +142,36 @@ app.post('/api/v1/contact', async (req, res) => {
 })
 
 app.get('/api/v1/admin/users', authMiddleware, adminOnly, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, google_place_id, facebook_page_id FROM users ORDER BY created_at DESC')
+  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, google_place_id, facebook_page_id, is_active, deactivated_at FROM users ORDER BY created_at DESC')
   res.json({ users: rows, total: rows.length })
+})
+// Desactivation d'un compte restaurant (role 'client') — reversible, jamais
+// de DELETE (cf. migration 022 : ~30 tables referencent users(id) avec un
+// ON DELETE mixte). Le compte devient injoignable au login (voir
+// /api/v1/auth/login) sans qu'aucune ligne existante ne soit touchee.
+app.patch('/api/v1/admin/users/:id/deactivate', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET is_active = false, deactivated_at = now()
+       WHERE id = $1 AND role = 'client'
+       RETURNING id, email, restaurant, is_active, deactivated_at`,
+      [req.params.id]
+    )
+    if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    res.json(rows[0])
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.patch('/api/v1/admin/users/:id/reactivate', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET is_active = true, deactivated_at = NULL
+       WHERE id = $1 AND role = 'client'
+       RETURNING id, email, restaurant, is_active, deactivated_at`,
+      [req.params.id]
+    )
+    if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    res.json(rows[0])
+  } catch (e) { res.status(500).json({ error: e.message }) }
 })
 app.patch('/api/v1/admin/users/:id/reputation-config', authMiddleware, adminOnly, async (req, res) => {
   const { google_place_id, facebook_page_id } = req.body
