@@ -106,6 +106,159 @@ async function listCustomers(pool, restaurantId) {
   }));
 }
 
+/**
+ * Fiche client detaillee : infos + historique commandes + grand-livre
+ * complet des points (pas juste le solde). Verifie que le client
+ * appartient bien au restaurant scope (IDOR).
+ */
+async function getCustomerDetail(pool, restaurantId, customerId) {
+  const customerRes = await pool.query(
+    'SELECT * FROM customers WHERE id = $1 AND restaurant_id = $2',
+    [customerId, restaurantId]
+  );
+  if (customerRes.rows.length === 0) {
+    const err = new Error('Client introuvable');
+    err.statusCode = 404;
+    throw err;
+  }
+  const customer = customerRes.rows[0];
+
+  const ordersRes = await pool.query(
+    `SELECT id, status, received_at, gross_amount, payment_method
+     FROM orders
+     WHERE customer_id = $1 AND restaurant_id = $2
+     ORDER BY received_at DESC`,
+    [customerId, restaurantId]
+  );
+
+  const ledgerRes = await pool.query(
+    `SELECT id, points_delta, reason, reference_type, reference_id, note, created_at
+     FROM loyalty_points_ledger
+     WHERE customer_id = $1 AND restaurant_id = $2
+     ORDER BY created_at DESC`,
+    [customerId, restaurantId]
+  );
+
+  const balance = ledgerRes.rows.reduce((sum, r) => sum + Number(r.points_delta), 0);
+
+  return {
+    id: customer.id,
+    phone: customer.phone,
+    name: customer.name,
+    birthday: customer.birthday,
+    notes: customer.notes,
+    created_at: customer.created_at,
+    points: balance,
+    tier: getTier(balance),
+    orders: ordersRes.rows,
+    points_ledger: ledgerRes.rows
+  };
+}
+
+async function updateCustomerNotes(pool, restaurantId, customerId, notes) {
+  const result = await pool.query(
+    'UPDATE customers SET notes = $1 WHERE id = $2 AND restaurant_id = $3 RETURNING *',
+    [notes || null, customerId, restaurantId]
+  );
+  if (result.rows.length === 0) {
+    const err = new Error('Client introuvable');
+    err.statusCode = 404;
+    throw err;
+  }
+  return result.rows[0];
+}
+
+/**
+ * Suppression physique d'un client fidelite. Sure : loyalty_points_ledger
+ * est en ON DELETE CASCADE (verifie migration 019), orders.customer_id
+ * repasse a NULL proprement (ON DELETE SET NULL) — aucune commande n'est
+ * supprimee, seul le rattachement au client disparait.
+ */
+async function deleteCustomer(pool, restaurantId, customerId) {
+  const result = await pool.query(
+    'DELETE FROM customers WHERE id = $1 AND restaurant_id = $2 RETURNING id',
+    [customerId, restaurantId]
+  );
+  if (result.rows.length === 0) {
+    const err = new Error('Client introuvable');
+    err.statusCode = 404;
+    throw err;
+  }
+  return true;
+}
+
+/**
+ * Ajout manuel d'un client, sans passer par une commande (constitution de
+ * la base clients). Telephone unique par restaurant (meme contrainte que
+ * findOrCreateCustomer / la table customers).
+ */
+async function createCustomer(pool, restaurantId, { phone, name, birthday }) {
+  if (!phone || !String(phone).trim()) {
+    const err = new Error('Le telephone est requis');
+    err.statusCode = 400;
+    throw err;
+  }
+  const normalizedPhone = String(phone).trim();
+  const existing = await pool.query(
+    'SELECT id FROM customers WHERE restaurant_id = $1 AND phone = $2',
+    [restaurantId, normalizedPhone]
+  );
+  if (existing.rows.length > 0) {
+    const err = new Error('Un client avec ce telephone existe deja');
+    err.statusCode = 409;
+    throw err;
+  }
+  const result = await pool.query(
+    'INSERT INTO customers (restaurant_id, phone, name, birthday) VALUES ($1,$2,$3,$4) RETURNING *',
+    [restaurantId, normalizedPhone, name || null, birthday || null]
+  );
+  return result.rows[0];
+}
+
+/**
+ * Import CSV en masse (telephone, nom, date de naissance). Le CSV est
+ * parse cote client (meme convention que /api/v1/import/csv) — cette
+ * fonction recoit un tableau de lignes deja normalisees.
+ * Best-effort ligne par ligne : un telephone invalide ou en double
+ * n'interrompt pas l'import du reste du fichier.
+ */
+async function importCustomersCsv(pool, restaurantId, rows) {
+  let inserted = 0;
+  let skipped = 0;
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const phone = row.phone ? String(row.phone).trim() : '';
+    if (!phone) {
+      skipped++;
+      errors.push(`Ligne ${i + 1}: telephone manquant`);
+      continue;
+    }
+    try {
+      const existing = await pool.query(
+        'SELECT id FROM customers WHERE restaurant_id = $1 AND phone = $2',
+        [restaurantId, phone]
+      );
+      if (existing.rows.length > 0) {
+        skipped++;
+        errors.push(`Ligne ${i + 1}: telephone ${phone} deja existant`);
+        continue;
+      }
+      await pool.query(
+        'INSERT INTO customers (restaurant_id, phone, name, birthday) VALUES ($1,$2,$3,$4)',
+        [restaurantId, phone, row.name || null, row.birthday || null]
+      );
+      inserted++;
+    } catch (err) {
+      skipped++;
+      errors.push(`Ligne ${i + 1}: ${err.message}`);
+    }
+  }
+
+  return { inserted, skipped, errors };
+}
+
 async function getStats(pool, restaurantId) {
   const customers = await listCustomers(pool, restaurantId);
   const byTier = { decouvreur: 0, habitue: 0, vip: 0 };
@@ -131,4 +284,7 @@ async function getStats(pool, restaurantId) {
   };
 }
 
-module.exports = { findOrCreateCustomer, awardPointsForOrder, getCustomerBalance, listCustomers, getStats, getTier, TIERS };
+module.exports = {
+  findOrCreateCustomer, awardPointsForOrder, getCustomerBalance, listCustomers, getStats, getTier, TIERS,
+  getCustomerDetail, updateCustomerNotes, deleteCustomer, createCustomer, importCustomersCsv
+};

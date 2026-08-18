@@ -45,6 +45,64 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
     }
   });
 
+  // GET /api/v1/restaurant/loyalty/customers/:id — fiche detaillee
+  // (historique commandes + grand-livre complet des points + notes)
+  router.get('/loyalty/customers/:id', restaurantScope, overviewAccess, async (req, res) => {
+    try {
+      const detail = await loyaltyService.getCustomerDetail(pool, req.scopedRestaurantId, req.params.id);
+      res.json(detail);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/v1/restaurant/loyalty/customers/:id/notes
+  router.patch('/loyalty/customers/:id/notes', restaurantScope, overviewAccess, async (req, res) => {
+    try {
+      const updated = await loyaltyService.updateCustomerNotes(pool, req.scopedRestaurantId, req.params.id, req.body.notes);
+      res.json(updated);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/v1/restaurant/loyalty/customers/:id — suppression physique
+  // (sure : cascade sur loyalty_points_ledger, orders.customer_id -> NULL)
+  router.delete('/loyalty/customers/:id', restaurantScope, overviewAccess, async (req, res) => {
+    try {
+      await loyaltyService.deleteCustomer(pool, req.scopedRestaurantId, req.params.id);
+      res.status(204).send();
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/v1/restaurant/loyalty/customers — ajout manuel, sans commande
+  router.post('/loyalty/customers', restaurantScope, overviewAccess, async (req, res) => {
+    try {
+      const created = await loyaltyService.createCustomer(pool, req.scopedRestaurantId, req.body);
+      res.status(201).json(created);
+    } catch (err) {
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/v1/restaurant/loyalty/customers/import — import CSV en masse.
+  // Le CSV est parse cote client (meme convention que /api/v1/import/csv) :
+  // { rows: [{ phone, name, birthday }, ...] }
+  router.post('/loyalty/customers/import', restaurantScope, overviewAccess, async (req, res) => {
+    const { rows } = req.body;
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'Donnees CSV manquantes' });
+    }
+    try {
+      const result = await loyaltyService.importCustomersCsv(pool, req.scopedRestaurantId, rows);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/v1/restaurant/loyalty/campaigns/winback
   // Candidats win-back + lien WhatsApp pre-rempli (envoi manuel, aucun
   // fournisseur SMS/WhatsApp Business API requis).
