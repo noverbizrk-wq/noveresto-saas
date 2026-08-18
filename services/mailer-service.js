@@ -115,7 +115,7 @@ function renderEmailTemplate({ preheader, title, bodyHtml, accentColor, cta }) {
             <td style="background:${BRAND.navyD};padding:28px 32px;text-align:center;">
               <div style="font-family:'Inter',Arial,Helvetica,sans-serif;font-size:12px;color:${BRAND.muted};line-height:1.7;margin-bottom:14px;">
                 La plateforme SaaS IA conçue nativement pour la restauration MENA.<br>
-                Tunisie · Maroc · Algérie · Sénégal · UAE
+                Tunisie · France · Maroc · Algérie · Sénégal · UAE
               </div>
               <div style="font-family:'Inter',Arial,Helvetica,sans-serif;font-size:12px;margin-bottom:14px;">
                 <a href="https://noveresto.app" style="color:${BRAND.teal};text-decoration:none;margin:0 8px;">noveresto.app</a>
