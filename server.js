@@ -9,6 +9,7 @@ const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 
 const app = express()
+const { currencyForCountry } = require('./lib/currency')
 app.set('trust proxy', 2) // Cloudflare + Nginx (2 sauts) - port 3000 desormais bloque en externe (pare-feu), seul Nginx l'atteint
 app.use(helmet())
 app.use(cors({
@@ -191,6 +192,8 @@ app.get('/api/v1/health', async (req, res) => {
 app.get('/api/v1/dashboard', authMiddleware, require('./middleware/restaurant-scope-middleware')(pool), async (req, res) => {
   const restaurantId = req.scopedRestaurantId
   try {
+    const countryRes = await pool.query('SELECT country FROM users WHERE id = $1', [restaurantId])
+    const currency = currencyForCountry(countryRes.rows[0]?.country)
     const todayRes = await pool.query(
       `SELECT COALESCE(SUM(gross_amount),0) AS revenue, COUNT(*) AS covers
        FROM orders WHERE restaurant_id = $1 AND received_at::date = CURRENT_DATE`,
@@ -276,6 +279,7 @@ app.get('/api/v1/dashboard', authMiddleware, require('./middleware/restaurant-sc
       user: req.user.name,
       role: req.user.role,
       date: new Date().toLocaleDateString('fr-FR'),
+      currency,
       kpis: {
         revenue_today_tnd: Math.round(revenueToday),
         covers,
