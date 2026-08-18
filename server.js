@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit')
 
 const app = express()
 const { currencyForCountry } = require('./lib/currency')
+const mailer = require('./services/mailer-service')
 app.set('trust proxy', 2) // Cloudflare + Nginx (2 sauts) - port 3000 desormais bloque en externe (pare-feu), seul Nginx l'atteint
 app.use(helmet())
 app.use(cors({
@@ -52,11 +53,32 @@ const loginLimiter = rateLimit({
   legacyHeaders: false
 })
 
-function authMiddleware(req, res, next) {
+// AUDIT SÉCURITÉ : verifie is_active ET password_changed_at a CHAQUE requete
+// authentifiee (pas seulement au login). Un JWT est stateless et reste
+// valide 7 jours par defaut — sans ce controle, un compte desactive ou un
+// token vole restait utilisable jusqu'a expiration meme apres desactivation
+// ou changement de mot de passe. password_changed_at (timestamptz) est
+// compare a decoded.iat (secondes epoch, ajoute automatiquement par
+// jwt.sign) : un token emis AVANT le dernier changement de mot de passe
+// est refuse. Necessite une requete DB par requete authentifiee — meme
+// cout que restaurantScopeMiddleware/moduleAccessMiddleware, deja ainsi
+// pour d'autres roles dans ce projet.
+async function authMiddleware(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1]
   if (!token) return res.status(401).json({ error: 'Token manquant' })
-  try { req.user = jwt.verify(token, JWT_SECRET); next() }
-  catch(e) { res.status(401).json({ error: 'Token invalide' }) }
+  let decoded
+  try { decoded = jwt.verify(token, JWT_SECRET) }
+  catch(e) { return res.status(401).json({ error: 'Token invalide' }) }
+  try {
+    const { rows } = await pool.query('SELECT is_active, password_changed_at FROM users WHERE id = $1', [decoded.id])
+    if (!rows.length) return res.status(401).json({ error: 'Compte introuvable' })
+    if (rows[0].is_active === false)
+      return res.status(403).json({ error: 'Ce compte a ete desactive. Contactez le support NoveResto.' })
+    if (rows[0].password_changed_at && Math.floor(new Date(rows[0].password_changed_at).getTime() / 1000) > decoded.iat)
+      return res.status(401).json({ error: 'Session expiree suite a un changement de mot de passe. Reconnectez-vous.' })
+    req.user = decoded
+    next()
+  } catch(e) { res.status(500).json({ error: 'Erreur d\'authentification' }) }
 }
 
 function adminOnly(req, res, next) {
@@ -74,6 +96,7 @@ app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
     if (user.is_active === false)
       return res.status(403).json({ error: 'Ce compte a ete desactive. Contactez le support NoveResto.' })
+    pool.query('UPDATE users SET last_login_at = now() WHERE id = $1', [user.id]).catch(e => console.error('[login] maj last_login_at echouee (non bloquant):', e.message))
     const payload = { id: user.id, email: user.email, role: user.role, name: user.name, restaurant: user.restaurant, organization_id: user.organization_id }
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
     res.json({ token, user: payload })
@@ -123,27 +146,38 @@ app.post('/api/v1/auth/register', async (req, res) => {
 
 app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at FROM users WHERE id = $1', [req.user.id])
+    const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, address, city, postal_code, logo_url, last_login_at FROM users WHERE id = $1', [req.user.id])
     if (!rows.length) return res.status(404).json({ error: 'Utilisateur introuvable' })
     res.json({ user: rows[0] })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
 })
 
-// Page profil : nom + nom du restaurant, modifiables par le compte
-// lui-meme. Le pays est volontairement exclu de cette route — il pilote
-// la devise affichee partout dans le dashboard (cf. commits recents sur
-// la normalisation devise/pays) ; le modifier ici casserait cette logique
-// sans passage par la meme normalisation qu'a l'inscription.
+// Page profil : nom, nom du restaurant, adresse, logo — modifiables par le
+// compte lui-meme. Le pays est volontairement exclu de cette route — il
+// pilote la devise affichee partout dans le dashboard (cf. commits recents
+// sur la normalisation devise/pays) ; le modifier ici casserait cette
+// logique sans passage par la meme normalisation qu'a l'inscription.
+//
+// logo_url : pas de stockage de fichier cote serveur (aucune infra upload/
+// S3 dans ce projet) — on accepte une URL deja hebergee ailleurs, validee
+// grossierement (http(s), longueur raisonnable) pour rester "peu d'effort".
 app.patch('/api/v1/auth/me', authMiddleware, async (req, res) => {
-  const { name, restaurant } = req.body
+  const { name, restaurant, address, city, postal_code, logo_url } = req.body
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Le nom est requis' })
   if (!restaurant || !String(restaurant).trim()) return res.status(400).json({ error: 'Le nom du restaurant est requis' })
+  let cleanLogoUrl = null
+  if (logo_url && String(logo_url).trim()) {
+    cleanLogoUrl = String(logo_url).trim()
+    if (!/^https?:\/\//i.test(cleanLogoUrl) || cleanLogoUrl.length > 500) {
+      return res.status(400).json({ error: 'URL du logo invalide (doit commencer par http:// ou https://)' })
+    }
+  }
   try {
     const { rows } = await pool.query(
-      `UPDATE users SET name = $1, restaurant = $2, updated_at = now()
-       WHERE id = $3
-       RETURNING id, email, name, restaurant, country, role, created_at`,
-      [String(name).trim(), String(restaurant).trim(), req.user.id]
+      `UPDATE users SET name = $1, restaurant = $2, address = $3, city = $4, postal_code = $5, logo_url = $6, updated_at = now()
+       WHERE id = $7
+       RETURNING id, email, name, restaurant, country, role, created_at, address, city, postal_code, logo_url, last_login_at`,
+      [String(name).trim(), String(restaurant).trim(), address ? String(address).trim() : null, city ? String(city).trim() : null, postal_code ? String(postal_code).trim() : null, cleanLogoUrl, req.user.id]
     )
     res.json({ user: rows[0] })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
@@ -165,12 +199,16 @@ app.post('/api/v1/auth/change-password', authMiddleware, changePasswordLimiter, 
   if (!current_password || !new_password) return res.status(400).json({ error: 'Mot de passe actuel et nouveau mot de passe requis' })
   if (String(new_password).length < 8) return res.status(400).json({ error: 'Le nouveau mot de passe doit faire au moins 8 caracteres' })
   try {
-    const { rows } = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id])
+    const { rows } = await pool.query('SELECT email, password FROM users WHERE id = $1', [req.user.id])
     if (!rows.length) return res.status(404).json({ error: 'Utilisateur introuvable' })
     if (!bcrypt.compareSync(current_password, rows[0].password))
       return res.status(401).json({ error: 'Mot de passe actuel incorrect' })
     const hash = bcrypt.hashSync(new_password, 10)
-    await pool.query('UPDATE users SET password = $1, updated_at = now() WHERE id = $2', [hash, req.user.id])
+    // password_changed_at invalide tout token deja emis (verifie dans
+    // authMiddleware) - protection si le compte etait compromis.
+    await pool.query('UPDATE users SET password = $1, password_changed_at = now(), updated_at = now() WHERE id = $2', [hash, req.user.id])
+    mailer.sendEmail({ to: rows[0].email, ...mailer.passwordChangedEmail() })
+      .catch(e => console.error('[change-password] envoi email echoue (non bloquant):', e.message))
     res.json({ success: true })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
 })
@@ -188,7 +226,7 @@ app.post('/api/v1/contact', async (req, res) => {
 })
 
 app.get('/api/v1/admin/users', authMiddleware, adminOnly, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, google_place_id, facebook_page_id, is_active, deactivated_at FROM users ORDER BY created_at DESC')
+  const { rows } = await pool.query('SELECT id, email, name, restaurant, country, role, created_at, google_place_id, facebook_page_id, is_active, deactivated_at, last_login_at, logo_url FROM users ORDER BY created_at DESC')
   res.json({ users: rows, total: rows.length })
 })
 // Desactivation d'un compte restaurant (role 'client') — reversible, jamais
@@ -204,6 +242,8 @@ app.patch('/api/v1/admin/users/:id/deactivate', authMiddleware, adminOnly, async
       [req.params.id]
     )
     if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    mailer.sendEmail({ to: rows[0].email, ...mailer.accountDeactivatedEmail(rows[0].restaurant || 'votre restaurant') })
+      .catch(e => console.error('[deactivate] envoi email echoue (non bloquant):', e.message))
     res.json(rows[0])
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -216,6 +256,8 @@ app.patch('/api/v1/admin/users/:id/reactivate', authMiddleware, adminOnly, async
       [req.params.id]
     )
     if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    mailer.sendEmail({ to: rows[0].email, ...mailer.accountReactivatedEmail(rows[0].restaurant || 'votre restaurant') })
+      .catch(e => console.error('[reactivate] envoi email echoue (non bloquant):', e.message))
     res.json(rows[0])
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
