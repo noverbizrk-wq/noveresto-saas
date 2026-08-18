@@ -9,6 +9,7 @@ const helmet = require('helmet')
 const rateLimit = require('express-rate-limit')
 
 const app = express()
+app.set('trust proxy', 2) // Cloudflare + Nginx (2 sauts) - port 3000 desormais bloque en externe (pare-feu), seul Nginx l'atteint
 app.use(helmet())
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'https://noveresto.app',
