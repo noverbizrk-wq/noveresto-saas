@@ -78,20 +78,43 @@ app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
 })
 
 app.post('/api/v1/auth/register', async (req, res) => {
-  const { email, password, name, restaurant, country } = req.body
+  const { email, password, name, restaurant, country, address, city, postal_code, specialties } = req.body
   if (!email || !password || !name || !restaurant) return res.status(400).json({ error: 'Champs requis manquants' })
   if (password.length < 8) return res.status(400).json({ error: 'Mot de passe trop court' })
   try {
     const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()])
     if (exists.rows.length) return res.status(409).json({ error: 'Email deja utilise' })
     const hash = bcrypt.hashSync(password, 10)
+
+    // Connexion automatique de la reputation : recherche du vrai Google
+    // Place ID a partir du nom + adresse fournis a l'inscription. Best-
+    // effort — n'echoue JAMAIS l'inscription si Google ne trouve rien, si
+    // l'adresse est absente, ou si la cle API n'est pas configuree.
+    let googlePlaceId = null
+    const googleKey = process.env.GOOGLE_PLACES_API_KEY
+    if (googleKey && address) {
+      try {
+        const query = encodeURIComponent(`${restaurant} ${address} ${city || ''}`.trim())
+        const searchUrl = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${query}&inputtype=textquery&fields=place_id,name,formatted_address&key=${googleKey}`
+        const searchRes = await fetch(searchUrl)
+        const searchData = await searchRes.json()
+        if (searchData.status === 'OK' && searchData.candidates?.[0]?.place_id) {
+          googlePlaceId = searchData.candidates[0].place_id
+        }
+      } catch (e) {
+        console.error('[register] recherche Google Place auto echouee (non bloquant):', e.message)
+      }
+    }
+
     const { rows } = await pool.query(
-      'INSERT INTO users (email, password, name, restaurant, country, role) VALUES ($1,$2,$3,$4,$5,\'client\') RETURNING id, email, name, restaurant, role',
-      [email.toLowerCase(), hash, name, restaurant, country || '']
+      `INSERT INTO users (email, password, name, restaurant, country, address, city, postal_code, specialties, google_place_id, role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'client') RETURNING id, email, name, restaurant, role, google_place_id`,
+      [email.toLowerCase(), hash, name, restaurant, country || '', address || null, city || null, postal_code || null, specialties || null, googlePlaceId]
     )
-    const user = rows[0]
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' })
-    res.status(201).json({ token, user })
+    const dbUser = rows[0]
+    const jwtPayload = { id: dbUser.id, email: dbUser.email, name: dbUser.name, restaurant: dbUser.restaurant, role: dbUser.role }
+    const token = jwt.sign(jwtPayload, JWT_SECRET, { expiresIn: '7d' })
+    res.status(201).json({ token, user: jwtPayload, google_place_id_found: !!dbUser.google_place_id })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
 })
 
@@ -127,6 +150,19 @@ app.patch('/api/v1/admin/users/:id/reputation-config', authMiddleware, adminOnly
        WHERE id = $3 AND role = 'client'
        RETURNING id, email, restaurant, google_place_id, facebook_page_id`,
       [google_place_id || null, facebook_page_id || null, req.params.id]
+    )
+    if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
+    res.json(rows[0])
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+app.patch('/api/v1/admin/users/:id/cuisine-type', authMiddleware, adminOnly, async (req, res) => {
+  const { cuisine_type } = req.body
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET cuisine_type = $1
+       WHERE id = $2 AND role = 'client'
+       RETURNING id, email, restaurant, cuisine_type`,
+      [cuisine_type || null, req.params.id]
     )
     if (rows.length === 0) return res.status(404).json({ error: 'Restaurant introuvable' })
     res.json(rows[0])
