@@ -129,6 +129,52 @@ app.get('/api/v1/auth/me', authMiddleware, async (req, res) => {
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
 })
 
+// Page profil : nom + nom du restaurant, modifiables par le compte
+// lui-meme. Le pays est volontairement exclu de cette route — il pilote
+// la devise affichee partout dans le dashboard (cf. commits recents sur
+// la normalisation devise/pays) ; le modifier ici casserait cette logique
+// sans passage par la meme normalisation qu'a l'inscription.
+app.patch('/api/v1/auth/me', authMiddleware, async (req, res) => {
+  const { name, restaurant } = req.body
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Le nom est requis' })
+  if (!restaurant || !String(restaurant).trim()) return res.status(400).json({ error: 'Le nom du restaurant est requis' })
+  try {
+    const { rows } = await pool.query(
+      `UPDATE users SET name = $1, restaurant = $2, updated_at = now()
+       WHERE id = $3
+       RETURNING id, email, name, restaurant, country, role, created_at`,
+      [String(name).trim(), String(restaurant).trim(), req.user.id]
+    )
+    res.json({ user: rows[0] })
+  } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
+})
+
+// AUDIT SÉCURITÉ : meme limiteur que le login — changement de mot de passe
+// requiert de connaitre le mot de passe actuel, mais on protege quand meme
+// contre un usage abusif d'un token vole (brute-force du mot de passe
+// actuel avant de le changer).
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Trop de tentatives. Réessayez dans 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+})
+app.post('/api/v1/auth/change-password', authMiddleware, changePasswordLimiter, async (req, res) => {
+  const { current_password, new_password } = req.body
+  if (!current_password || !new_password) return res.status(400).json({ error: 'Mot de passe actuel et nouveau mot de passe requis' })
+  if (String(new_password).length < 8) return res.status(400).json({ error: 'Le nouveau mot de passe doit faire au moins 8 caracteres' })
+  try {
+    const { rows } = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id])
+    if (!rows.length) return res.status(404).json({ error: 'Utilisateur introuvable' })
+    if (!bcrypt.compareSync(current_password, rows[0].password))
+      return res.status(401).json({ error: 'Mot de passe actuel incorrect' })
+    const hash = bcrypt.hashSync(new_password, 10)
+    await pool.query('UPDATE users SET password = $1, updated_at = now() WHERE id = $2', [hash, req.user.id])
+    res.json({ success: true })
+  } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
+})
+
 app.post('/api/v1/contact', async (req, res) => {
   const { name, email, restaurant, country, phone, message, type } = req.body
   if (!name || !email || !message) return res.status(400).json({ error: 'Champs requis manquants' })
