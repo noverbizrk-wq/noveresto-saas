@@ -78,7 +78,7 @@ app.post('/api/v1/auth/login', loginLimiter, async (req, res) => {
 })
 
 app.post('/api/v1/auth/register', async (req, res) => {
-  const { email, password, name, restaurant, country, address, city, postal_code, specialties } = req.body
+  const { email, password, name, restaurant, country, address, city, postal_code, specialties, cuisine_type } = req.body
   if (!email || !password || !name || !restaurant) return res.status(400).json({ error: 'Champs requis manquants' })
   if (password.length < 8) return res.status(400).json({ error: 'Mot de passe trop court' })
   try {
@@ -107,9 +107,9 @@ app.post('/api/v1/auth/register', async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password, name, restaurant, country, address, city, postal_code, specialties, google_place_id, role)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'client') RETURNING id, email, name, restaurant, role, google_place_id`,
-      [email.toLowerCase(), hash, name, restaurant, country || '', address || null, city || null, postal_code || null, specialties || null, googlePlaceId]
+      `INSERT INTO users (email, password, name, restaurant, country, address, city, postal_code, specialties, cuisine_type, google_place_id, role)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'client') RETURNING id, email, name, restaurant, role, google_place_id`,
+      [email.toLowerCase(), hash, name, restaurant, country || '', address || null, city || null, postal_code || null, specialties || null, cuisine_type || null, googlePlaceId]
     )
     const dbUser = rows[0]
     const jwtPayload = { id: dbUser.id, email: dbUser.email, name: dbUser.name, restaurant: dbUser.restaurant, role: dbUser.role }
