@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const teifService = require('./services/teif-service');
+const mailer = require('./services/mailer-service');
 
 module.exports = function (pool, authMiddleware, restaurantScope) {
 
@@ -18,10 +19,10 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // nouveau — la facturation est une extension naturelle de ce module.
 
   // POST /api/v1/restaurant/orders/:orderId/teif-invoice
-  // { customer_tax_id, customer_name, customer_address?, customer_city?, customer_postal_code? }
+  // { customer_tax_id, customer_name, customer_address?, customer_city?, customer_postal_code?, customer_email? }
   router.post('/orders/:orderId/teif-invoice', restaurantScope, teifAccess, async (req, res) => {
     try {
-      const { customer_tax_id, customer_name, customer_address, customer_city, customer_postal_code } = req.body;
+      const { customer_tax_id, customer_name, customer_address, customer_city, customer_postal_code, customer_email } = req.body;
       if (!customer_tax_id || !customer_tax_id.trim()) {
         return res.status(400).json({ error: 'Le matricule fiscal du client est requis' });
       }
@@ -34,7 +35,21 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
         address: customer_address,
         city: customer_city,
         postal_code: customer_postal_code,
+        email: customer_email,
       }, req.user?.id);
+
+      // Copie de courtoisie par email si une adresse client a ete fournie.
+      // Best-effort : la facture reste creee meme si l'envoi echoue.
+      if (customer_email && customer_email.trim()) {
+        const restaurantName = req.user?.restaurant || 'votre restaurant';
+        mailer.sendEmail({
+          to: customer_email.trim(),
+          ...mailer.invoiceEmail(restaurantName, result.invoice_number, result.totals),
+          attachments: [{ filename: `${result.invoice_number}.xml`, content: result.xml }]
+        }).catch(e => console.error('[teif] envoi email facture echoue (non bloquant):', e.message));
+      }
+
+      delete result.xml; // ne fait pas partie de la reponse API habituelle
       res.status(201).json(result);
     } catch (err) {
       res.status(err.statusCode || 500).json({ error: err.message });

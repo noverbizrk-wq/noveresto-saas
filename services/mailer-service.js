@@ -34,16 +34,25 @@ const BRAND = {
   white:  '#ffffff',
 };
 
-async function sendEmail({ to, subject, html }) {
+/**
+ * attachments (optionnel) : [{ filename, content }] — content en texte
+ * brut (UTF-8), encode ici en base64 comme l'attend l'API Resend. Ne pas
+ * pre-encoder cote appelant.
+ */
+async function sendEmail({ to, subject, html, attachments }) {
   if (!RESEND_API_KEY) {
     console.log(`[mailer] RESEND_API_KEY absente — email non envoye (to=${to}, subject="${subject}")`);
     return { sent: false, reason: 'no_api_key' };
   }
   try {
+    const body = { from: FROM_EMAIL, to, subject, html };
+    if (attachments?.length) {
+      body.attachments = attachments.map(a => ({ filename: a.filename, content: Buffer.from(a.content, 'utf-8').toString('base64') }));
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM_EMAIL, to, subject, html })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       const errText = await res.text();
@@ -249,8 +258,34 @@ function criticalReviewAlertEmail(restaurantName, reviews) {
   };
 }
 
+/**
+ * Copie de courtoisie de la facture TEIF au client B2B, XML en piece
+ * jointe. Le document n'a PAS de valeur legale tant qu'il n'est pas
+ * signe/soumis a TTN (cf. teif-service.js) — le libelle evite donc de
+ * parler de "facture officielle" ou de suggerer une valeur fiscale.
+ */
+function invoiceEmail(restaurantName, invoiceNumber, totals) {
+  return {
+    subject: `Votre facture ${invoiceNumber} — ${restaurantName}`,
+    html: renderEmailTemplate({
+      preheader: `Facture ${invoiceNumber} de ${restaurantName} — ${totals.totalTTC} TND TTC.`,
+      title: '🧾 Votre facture',
+      accentColor: BRAND.teal,
+      bodyHtml: `
+        <p style="margin:0 0 14px;">Bonjour,</p>
+        <p style="margin:0 0 16px;">Veuillez trouver ci-joint votre facture de la part de <strong>${restaurantName}</strong> (document XML, format TEIF).</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;background:#F1F5F9;border-radius:8px;padding:4px 16px;margin-bottom:4px;">
+          <tr><td style="padding:8px 0;color:${BRAND.mutedD};">N° facture</td><td style="padding:8px 0;text-align:right;font-weight:700;">${invoiceNumber}</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.mutedD};border-top:1px solid #E2E8F0;">Total HT</td><td style="padding:8px 0;text-align:right;border-top:1px solid #E2E8F0;">${totals.subtotalHT} TND</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.mutedD};">TVA</td><td style="padding:8px 0;text-align:right;">${totals.totalVAT} TND</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.navy};font-weight:700;border-top:1px solid #E2E8F0;">Total TTC</td><td style="padding:8px 0;text-align:right;font-weight:800;color:${BRAND.tealD};border-top:1px solid #E2E8F0;">${totals.totalTTC} TND</td></tr>
+        </table>`
+    })
+  };
+}
+
 module.exports = {
   sendEmail, renderEmailTemplate,
   accountDeactivatedEmail, accountReactivatedEmail, passwordChangedEmail,
-  newContactLeadEmail, contactConfirmationEmail, criticalReviewAlertEmail
+  newContactLeadEmail, contactConfirmationEmail, criticalReviewAlertEmail, invoiceEmail
 };

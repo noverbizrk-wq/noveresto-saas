@@ -142,13 +142,13 @@ async function createInvoice(pool, restaurantId, orderId, customer, userId) {
 
   const result = await pool.query(
     `INSERT INTO teif_invoices
-      (restaurant_id, order_id, invoice_number, customer_tax_id, customer_name, customer_address, customer_city, customer_postal_code, teif_xml, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-     RETURNING id, invoice_number, status, created_at`,
-    [restaurantId, orderId, invoiceNumber, customer.tax_id, customer.name, customer.address || null, customer.city || null, customer.postal_code || null, xml, userId || null]
+      (restaurant_id, order_id, invoice_number, customer_tax_id, customer_name, customer_address, customer_city, customer_postal_code, customer_email, teif_xml, created_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+     RETURNING id, invoice_number, status, created_at, customer_email`,
+    [restaurantId, orderId, invoiceNumber, customer.tax_id, customer.name, customer.address || null, customer.city || null, customer.postal_code || null, customer.email || null, xml, userId || null]
   );
 
-  return { ...result.rows[0], totals };
+  return { ...result.rows[0], totals, xml };
 }
 
 async function getInvoice(pool, restaurantId, orderId) {
