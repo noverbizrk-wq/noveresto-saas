@@ -185,4 +185,72 @@ function passwordChangedEmail() {
   };
 }
 
-module.exports = { sendEmail, renderEmailTemplate, accountDeactivatedEmail, accountReactivatedEmail, passwordChangedEmail };
+function newContactLeadEmail(contact) {
+  const typeLabels = { demo: 'Demande de démo', pricing: 'Question tarifs', technical: 'Question technique', partnership: 'Partenariat', general: 'Général' };
+  return {
+    subject: `Nouveau lead NoveResto — ${contact.name}${contact.restaurant ? ' (' + contact.restaurant + ')' : ''}`,
+    html: renderEmailTemplate({
+      preheader: `${contact.name} vient de remplir le formulaire de contact.`,
+      title: '📩 Nouveau lead',
+      accentColor: BRAND.teal,
+      bodyHtml: `
+        <p style="margin:0 0 14px;"><strong>${contact.name}</strong> vient de remplir le formulaire de contact du site.</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin-bottom:14px;">
+          <tr><td style="padding:4px 0;color:${BRAND.mutedD};width:110px;">Email</td><td style="padding:4px 0;"><a href="mailto:${contact.email}" style="color:${BRAND.tealD};">${contact.email}</a></td></tr>
+          ${contact.restaurant ? `<tr><td style="padding:4px 0;color:${BRAND.mutedD};">Restaurant</td><td style="padding:4px 0;">${contact.restaurant}</td></tr>` : ''}
+          ${contact.country ? `<tr><td style="padding:4px 0;color:${BRAND.mutedD};">Pays</td><td style="padding:4px 0;">${contact.country}</td></tr>` : ''}
+          ${contact.phone ? `<tr><td style="padding:4px 0;color:${BRAND.mutedD};">Téléphone</td><td style="padding:4px 0;">${contact.phone}</td></tr>` : ''}
+          <tr><td style="padding:4px 0;color:${BRAND.mutedD};">Objet</td><td style="padding:4px 0;">${typeLabels[contact.type] || contact.type || 'Général'}</td></tr>
+        </table>
+        <div style="background:#F1F5F9;border-radius:8px;padding:14px 16px;font-size:14px;color:${BRAND.navy};white-space:pre-wrap;">${contact.message}</div>`,
+      cta: { label: 'Répondre par email', url: `mailto:${contact.email}` }
+    })
+  };
+}
+
+function contactConfirmationEmail(name) {
+  return {
+    subject: 'Votre message a bien été reçu — NoveResto',
+    html: renderEmailTemplate({
+      preheader: 'Merci pour votre message, notre équipe vous répond sous 24h.',
+      title: '✅ Message bien reçu',
+      accentColor: BRAND.teal,
+      bodyHtml: `
+        <p style="margin:0 0 14px;">Bonjour ${name || ''},</p>
+        <p style="margin:0 0 14px;">Merci pour votre message ! Notre équipe l'a bien reçu et vous répond sous 24h.</p>
+        <p style="margin:0;">En attendant, n'hésitez pas à explorer <a href="https://noveresto.app" style="color:${BRAND.tealD};">noveresto.app</a>.</p>`
+    })
+  };
+}
+
+const PLATFORM_LABELS = { google: 'Google', facebook: 'Facebook', ubereats: 'Uber Eats', deliveroo: 'Deliveroo', glovo: 'Glovo', jumia: 'Jumia Food' };
+
+function criticalReviewAlertEmail(restaurantName, reviews) {
+  const count = reviews.length;
+  const reviewsHtml = reviews.slice(0, 5).map(r => `
+    <div style="border-left:3px solid ${BRAND.red};background:#F1F5F9;border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:700;color:${BRAND.navy};margin-bottom:4px;">${'⭐'.repeat(Math.max(1, Math.round(r.rating || 1)))} · ${r.author || 'Anonyme'} · ${PLATFORM_LABELS[r.platform] || r.platform || ''}</div>
+      <div style="font-size:13px;color:${BRAND.navy};font-style:italic;">"${(r.text || '').slice(0, 220)}${(r.text || '').length > 220 ? '…' : ''}"</div>
+    </div>`).join('');
+
+  return {
+    subject: count === 1 ? `⚠️ Nouvel avis critique reçu — ${restaurantName}` : `⚠️ ${count} nouveaux avis critiques reçus — ${restaurantName}`,
+    html: renderEmailTemplate({
+      preheader: `${count > 1 ? count + ' nouveaux avis critiques' : 'Un nouvel avis critique'} sur ${restaurantName}.`,
+      title: `⚠️ ${count > 1 ? count + ' avis critiques' : 'Avis critique'} à traiter`,
+      accentColor: BRAND.red,
+      bodyHtml: `
+        <p style="margin:0 0 14px;">Bonjour,</p>
+        <p style="margin:0 0 16px;">${count > 1 ? `${count} nouveaux avis critiques viennent d'être détectés` : `Un nouvel avis critique vient d'être détecté`} pour <strong>${restaurantName}</strong> — note très basse ou signalement d'un problème grave (remboursement, intoxication, plainte...).</p>
+        ${reviewsHtml}
+        <p style="margin:16px 0 0;">Une réponse rapide limite l'impact sur votre réputation en ligne.</p>`,
+      cta: { label: 'Voir et répondre', url: 'https://noveresto.app/app/dashboard/reputation' }
+    })
+  };
+}
+
+module.exports = {
+  sendEmail, renderEmailTemplate,
+  accountDeactivatedEmail, accountReactivatedEmail, passwordChangedEmail,
+  newContactLeadEmail, contactConfirmationEmail, criticalReviewAlertEmail
+};

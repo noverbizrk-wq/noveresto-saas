@@ -8,6 +8,7 @@ const express = require('express')
 const router  = express.Router()
 const fetch   = require('node-fetch')
 const Anthropic = require('@anthropic-ai/sdk')
+const mailer = require('./services/mailer-service')
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -163,6 +164,14 @@ function getDemoData() {
 
 // ── SAUVEGARDER AVIS EN DB ────────────────────────────────────────────────────
 
+// Retourne la liste des avis reellement NOUVEAUX (jamais vus avant) parmi
+// ceux qui viennent d'etre sauvegardes — sert a declencher une alerte
+// email uniquement sur un avis critique inedit, jamais a chaque chargement
+// de la page Reputation (qui re-sauvegarde les memes avis a chaque GET).
+//
+// Technique : "xmax = 0" est vrai uniquement quand la ligne vient d'etre
+// INSEREE par CETTE requete (jamais vrai sur un UPDATE via ON CONFLICT) —
+// evite d'avoir besoin d'une colonne "alerted_at" separee.
 async function saveReviewsToDB(pool, restaurantId, reviews) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS reviews (
@@ -184,8 +193,9 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
     )
   `)
 
+  const newlyInserted = [];
   for (const rv of reviews) {
-    await pool.query(`
+    const result = await pool.query(`
       INSERT INTO reviews (id, restaurant_id, platform, author, avatar, rating, text, date, sentiment, urgency, replied, reply_text)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       ON CONFLICT (id) DO UPDATE SET
@@ -194,7 +204,30 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
         replied    = EXCLUDED.replied,
         reply_text = EXCLUDED.reply_text,
         updated_at = NOW()
-    `, [rv.id, restaurantId, rv.platform, rv.author, rv.avatar, rv.rating, rv.text, rv.date, rv.sentiment, rv.urgency, rv.replied, rv.reply_text])
+      RETURNING (xmax = 0) AS is_new
+    `, [rv.id, restaurantId, rv.platform, rv.author, rv.avatar, rv.rating, rv.text, rv.date, rv.sentiment, rv.urgency, rv.replied, rv.reply_text]);
+    if (result.rows[0]?.is_new) newlyInserted.push(rv);
+  }
+  return newlyInserted;
+}
+
+/**
+ * Alerte email au restaurateur sur un avis critique INEDIT (note <= 2 ou
+ * mots-cles graves — cf. detectUrgency). Best-effort, desactivable via
+ * CRITICAL_REVIEW_ALERT_ENABLED=false. Un seul email meme si plusieurs
+ * avis critiques arrivent dans le meme batch (pas un email par avis).
+ */
+async function alertOnCriticalReviews(pool, restaurantId, newReviews) {
+  if (process.env.CRITICAL_REVIEW_ALERT_ENABLED === 'false') return;
+  const critical = newReviews.filter(r => r.urgency === 'critical');
+  if (critical.length === 0) return;
+  try {
+    const userRes = await pool.query('SELECT email, restaurant FROM users WHERE id = $1', [restaurantId]);
+    const user = userRes.rows[0];
+    if (!user?.email) return;
+    await mailer.sendEmail({ to: user.email, ...mailer.criticalReviewAlertEmail(user.restaurant || 'votre restaurant', critical) });
+  } catch (e) {
+    console.error('[reputation] alerte avis critique echouee (non bloquant):', e.message);
   }
 }
 
@@ -257,9 +290,16 @@ router.get('/', async (req, res) => {
       if (dbReviews?.rows?.length) allReviews = [...allReviews, ...dbReviews.rows]
     }
 
-    // Sauvegarder en DB si pool disponible
+    // Sauvegarder en DB si pool disponible. Alerte email uniquement en
+    // mode production (jamais sur les avis de demo, qui reapparaitraient
+    // a chaque essai gratuit et spammeraient inutilement).
     if (req.pool && allReviews.length) {
-      try { await saveReviewsToDB(req.pool, restaurantId, allReviews) } catch(e) {}
+      try {
+        const newReviews = await saveReviewsToDB(req.pool, restaurantId, allReviews)
+        if (!useDemo && newReviews.length) {
+          alertOnCriticalReviews(req.pool, restaurantId, newReviews).catch(() => {})
+        }
+      } catch(e) {}
     }
 
     // Trier par date décroissante
