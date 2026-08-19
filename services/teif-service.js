@@ -117,52 +117,11 @@ function generateTEIF(order, items, supplier, customer, invoiceNumber) {
   };
 }
 
-async function createInvoice(pool, restaurantId, orderId, customer, userId) {
-  const orderResult = await pool.query('SELECT * FROM orders WHERE id = $1 AND restaurant_id = $2', [orderId, restaurantId]);
-  const order = orderResult.rows[0];
-  if (!order) {
-    const err = new Error('Commande introuvable');
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const existing = await pool.query('SELECT * FROM teif_invoices WHERE restaurant_id = $1 AND order_id = $2', [restaurantId, orderId]);
-  if (existing.rows.length > 0) {
-    const err = new Error('Une facture TEIF existe déjà pour cette commande');
-    err.statusCode = 409;
-    throw err;
-  }
-
-  const itemsResult = await pool.query('SELECT * FROM order_items WHERE order_id = $1', [orderId]);
-  const supplierResult = await pool.query('SELECT restaurant, name, tax_id, address, city, postal_code FROM users WHERE id = $1', [restaurantId]);
-  const supplier = supplierResult.rows[0] || {};
-
-  const invoiceNumber = `NR-${restaurantId}-${orderId}-${Date.now()}`;
-  const { xml, totals } = generateTEIF(order, itemsResult.rows, supplier, customer, invoiceNumber);
-
-  const result = await pool.query(
-    `INSERT INTO teif_invoices
-      (restaurant_id, order_id, invoice_number, customer_tax_id, customer_name, customer_address, customer_city, customer_postal_code, customer_email, teif_xml, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-     RETURNING id, invoice_number, status, created_at, customer_email`,
-    [restaurantId, orderId, invoiceNumber, customer.tax_id, customer.name, customer.address || null, customer.city || null, customer.postal_code || null, customer.email || null, xml, userId || null]
-  );
-
-  return { ...result.rows[0], totals, xml };
-}
-
-async function getInvoice(pool, restaurantId, orderId) {
-  const result = await pool.query('SELECT * FROM teif_invoices WHERE restaurant_id = $1 AND order_id = $2', [restaurantId, orderId]);
-  return result.rows[0] || null;
-}
-
-async function listInvoices(pool, restaurantId) {
-  const result = await pool.query(
-    `SELECT id, order_id, invoice_number, customer_name, status, created_at FROM teif_invoices WHERE restaurant_id = $1 ORDER BY created_at DESC`,
-    [restaurantId]
-  );
-  return result.rows;
-}
+// createInvoice/getInvoice/listInvoices ont ete deplacees vers
+// invoice-service.js, qui orchestre le choix du format (TEIF pour la
+// Tunisie, PDF pour les autres pays via pdf-invoice-service.js) puis
+// appelle generateTEIF() ci-dessus pour la partie XML. Conserve ici
+// uniquement la generation pure + le profil fiscal de l'emetteur.
 
 async function updateSupplierTaxInfo(pool, userId, { tax_id, address, city, postal_code }) {
   const updates = [];
@@ -185,4 +144,4 @@ async function updateSupplierTaxInfo(pool, userId, { tax_id, address, city, post
   return result.rows[0];
 }
 
-module.exports = { generateTEIF, createInvoice, getInvoice, listInvoices, updateSupplierTaxInfo };
+module.exports = { generateTEIF, updateSupplierTaxInfo };
