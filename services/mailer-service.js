@@ -35,9 +35,10 @@ const BRAND = {
 };
 
 /**
- * attachments (optionnel) : [{ filename, content }] — content en texte
- * brut (UTF-8), encode ici en base64 comme l'attend l'API Resend. Ne pas
- * pre-encoder cote appelant.
+ * attachments (optionnel) : [{ filename, content }] — content accepte soit
+ * un Buffer (fichier binaire, ex. PDF), soit une string texte brut
+ * (ex. XML) ; encode ici en base64 comme l'attend l'API Resend dans les
+ * deux cas. Ne pas pre-encoder cote appelant.
  */
 async function sendEmail({ to, subject, html, attachments }) {
   if (!RESEND_API_KEY) {
@@ -47,7 +48,10 @@ async function sendEmail({ to, subject, html, attachments }) {
   try {
     const body = { from: FROM_EMAIL, to, subject, html };
     if (attachments?.length) {
-      body.attachments = attachments.map(a => ({ filename: a.filename, content: Buffer.from(a.content, 'utf-8').toString('base64') }));
+      body.attachments = attachments.map(a => ({
+        filename: a.filename,
+        content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : Buffer.from(a.content, 'utf-8').toString('base64')
+      }));
     }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -259,26 +263,29 @@ function criticalReviewAlertEmail(restaurantName, reviews) {
 }
 
 /**
- * Copie de courtoisie de la facture TEIF au client B2B, XML en piece
- * jointe. Le document n'a PAS de valeur legale tant qu'il n'est pas
- * signe/soumis a TTN (cf. teif-service.js) — le libelle evite donc de
- * parler de "facture officielle" ou de suggerer une valeur fiscale.
+ * Copie de courtoisie de la facture au client B2B, document en piece
+ * jointe (XML/TEIF pour la Tunisie, PDF pour les autres pays — cf.
+ * invoice-service.js). Le document n'a PAS de valeur legale/de
+ * facturation electronique certifiee (cf. teif-service.js et
+ * pdf-invoice-service.js) — le libelle evite donc de parler de "facture
+ * officielle".
  */
-function invoiceEmail(restaurantName, invoiceNumber, totals) {
+function invoiceEmail(restaurantName, invoiceNumber, totals, format = 'teif_xml', currency = 'TND') {
+  const formatLabel = format === 'pdf' ? 'document PDF' : 'document XML, format TEIF';
   return {
     subject: `Votre facture ${invoiceNumber} — ${restaurantName}`,
     html: renderEmailTemplate({
-      preheader: `Facture ${invoiceNumber} de ${restaurantName} — ${totals.totalTTC} TND TTC.`,
+      preheader: `Facture ${invoiceNumber} de ${restaurantName} — ${totals.totalTTC} ${currency} TTC.`,
       title: '🧾 Votre facture',
       accentColor: BRAND.teal,
       bodyHtml: `
         <p style="margin:0 0 14px;">Bonjour,</p>
-        <p style="margin:0 0 16px;">Veuillez trouver ci-joint votre facture de la part de <strong>${restaurantName}</strong> (document XML, format TEIF).</p>
+        <p style="margin:0 0 16px;">Veuillez trouver ci-joint votre facture de la part de <strong>${restaurantName}</strong> (${formatLabel}).</p>
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;background:#F1F5F9;border-radius:8px;padding:4px 16px;margin-bottom:4px;">
           <tr><td style="padding:8px 0;color:${BRAND.mutedD};">N° facture</td><td style="padding:8px 0;text-align:right;font-weight:700;">${invoiceNumber}</td></tr>
-          <tr><td style="padding:8px 0;color:${BRAND.mutedD};border-top:1px solid #E2E8F0;">Total HT</td><td style="padding:8px 0;text-align:right;border-top:1px solid #E2E8F0;">${totals.subtotalHT} TND</td></tr>
-          <tr><td style="padding:8px 0;color:${BRAND.mutedD};">TVA</td><td style="padding:8px 0;text-align:right;">${totals.totalVAT} TND</td></tr>
-          <tr><td style="padding:8px 0;color:${BRAND.navy};font-weight:700;border-top:1px solid #E2E8F0;">Total TTC</td><td style="padding:8px 0;text-align:right;font-weight:800;color:${BRAND.tealD};border-top:1px solid #E2E8F0;">${totals.totalTTC} TND</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.mutedD};border-top:1px solid #E2E8F0;">Total HT</td><td style="padding:8px 0;text-align:right;border-top:1px solid #E2E8F0;">${totals.subtotalHT} ${currency}</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.mutedD};">TVA</td><td style="padding:8px 0;text-align:right;">${totals.totalVAT} ${currency}</td></tr>
+          <tr><td style="padding:8px 0;color:${BRAND.navy};font-weight:700;border-top:1px solid #E2E8F0;">Total TTC</td><td style="padding:8px 0;text-align:right;font-weight:800;color:${BRAND.tealD};border-top:1px solid #E2E8F0;">${totals.totalTTC} ${currency}</td></tr>
         </table>`
     })
   };
