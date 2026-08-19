@@ -221,6 +221,15 @@ app.post('/api/v1/contact', async (req, res) => {
       'INSERT INTO contacts (name, email, restaurant, country, phone, message, type) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
       [name, email, restaurant||'', country||'', phone||'', message, type||'general']
     )
+    // Notification au fondateur (nouveau lead) + accuse de reception a
+    // l'expediteur. Best-effort : ne bloque jamais la reponse au formulaire
+    // si CONTACT_NOTIFICATION_EMAIL est absente ou si l'envoi echoue.
+    if (process.env.CONTACT_NOTIFICATION_EMAIL) {
+      mailer.sendEmail({ to: process.env.CONTACT_NOTIFICATION_EMAIL, ...mailer.newContactLeadEmail({ name, email, restaurant, country, phone, message, type }) })
+        .catch(e => console.error('[contact] notification lead echouee (non bloquant):', e.message))
+    }
+    mailer.sendEmail({ to: email, ...mailer.contactConfirmationEmail(name) })
+      .catch(e => console.error('[contact] confirmation expediteur echouee (non bloquant):', e.message))
     res.status(201).json({ success: true, message: 'Message recu !', id: rows[0].id })
   } catch(e) { res.status(500).json({ error: 'Erreur serveur' }) }
 })
