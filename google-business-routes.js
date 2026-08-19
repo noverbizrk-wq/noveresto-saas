@@ -21,7 +21,9 @@ module.exports = function (pool, authMiddleware, restaurantScope) {
   // GET /api/v1/google-business/oauth/callback?code=...&state=...
   oauthRouter.get('/oauth/callback', async (req, res) => {
     const { code, state, error: googleError } = req.query;
-    const redirectBase = 'https://noveresto.app/app/dashboard/reputation';
+    // Configuration centralisee : la connexion/deconnexion Google Business
+    // Profile se pilote depuis /dashboard/settings, pas depuis Reputation.
+    const redirectBase = 'https://noveresto.app/app/dashboard/settings';
 
     if (googleError) {
       return res.redirect(`${redirectBase}?google_connect=error&reason=${encodeURIComponent(googleError)}`);
