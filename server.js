@@ -499,6 +499,7 @@ const publicDiagnosticRoutes = require('./public-diagnostic-routes')(pool)
 const restaurantTeifRoutes = require('./restaurant-teif-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const { webhookRouter: deliverooWebhookRouter, manageRouter: deliverooManageRouter } = require('./deliveroo-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 const { webhookRouter: glovoWebhookRouter, manageRouter: glovoManageRouter } = require('./glovo-routes')(pool, authMiddleware, restaurantScopeMiddleware)
+const { oauthRouter: googleBusinessOauthRouter, manageRouter: googleBusinessManageRouter } = require('./google-business-routes')(pool, authMiddleware, restaurantScopeMiddleware)
 app.use('/api/v1/restaurant', restaurantOrdersRoutes)
 app.use('/api/v1/restaurant', restaurantMenuRoutes)
 app.use('/api/v1/restaurant', restaurantCostingRoutes)
@@ -519,6 +520,10 @@ app.use('/api/v1/webhooks', deliverooWebhookRouter)
 app.use('/api/v1/restaurant', deliverooManageRouter)
 app.use('/api/v1/webhooks', glovoWebhookRouter)
 app.use('/api/v1/restaurant', glovoManageRouter)
+// Public : Google redirige le navigateur directement ici (pas de Bearer possible)
+app.use('/api/v1/google-business', googleBusinessOauthRouter)
+// Authentifie : /api/v1/reputation/google/* (meme prefixe que le reste du module reputation)
+app.use('/api/v1/reputation', googleBusinessManageRouter)
 
 const PORT = 3000
 app.listen(PORT, () => {

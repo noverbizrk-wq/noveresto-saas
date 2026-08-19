@@ -9,6 +9,7 @@ const router  = express.Router()
 const fetch   = require('node-fetch')
 const Anthropic = require('@anthropic-ai/sdk')
 const mailer = require('./services/mailer-service')
+const googleBusinessService = require('./services/google-business-service')
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -64,6 +65,37 @@ async function fetchGoogleReviews(placeId, apiKey) {
       reply_text:  rv.owner_response?.text || null,
     }))
   }
+}
+
+// ── GOOGLE BUSINESS PROFILE API (avis REPONDABLES) ───────────────────────────
+
+const STAR_RATING_MAP = { ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5 };
+
+// Contrairement a fetchGoogleReviews() (Places API, lecture seule), les
+// avis recuperes ici portent un `name` (resource path complet, ex.
+// "accounts/123/locations/456/reviews/AbCd...") utilisable ensuite pour
+// PUBLIER une reponse via googleBusinessService.postReplyToGoogle().
+async function fetchGoogleBusinessReviews(locationName, accessToken) {
+  const reviews = await googleBusinessService.fetchReviewsViaBusinessProfile(accessToken, locationName)
+  return reviews.map(rv => {
+    const rating = STAR_RATING_MAP[rv.starRating] || null
+    const text = rv.comment || ''
+    return {
+      id: rv.name,
+      google_review_name: rv.name,
+      platform: 'google',
+      author: rv.reviewer?.displayName || 'Anonyme',
+      avatar: rv.reviewer?.profilePhotoUrl || null,
+      rating,
+      text,
+      date: rv.createTime,
+      relative: null,
+      sentiment: detectSentiment(text),
+      urgency: rating ? detectUrgency(text, rating) : 'low',
+      replied: !!rv.reviewReply,
+      reply_text: rv.reviewReply?.comment || null,
+    }
+  })
 }
 
 // ── META GRAPH API (Facebook Page Reviews) ────────────────────────────────────
@@ -188,6 +220,8 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
       replied       BOOLEAN DEFAULT FALSE,
       reply_text    TEXT,
       ai_reply      TEXT,
+      google_review_name TEXT,
+      auto_replied  BOOLEAN DEFAULT FALSE,
       created_at    TIMESTAMP DEFAULT NOW(),
       updated_at    TIMESTAMP DEFAULT NOW()
     )
@@ -196,16 +230,21 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
   const newlyInserted = [];
   for (const rv of reviews) {
     const result = await pool.query(`
-      INSERT INTO reviews (id, restaurant_id, platform, author, avatar, rating, text, date, sentiment, urgency, replied, reply_text)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      INSERT INTO reviews (id, restaurant_id, platform, author, avatar, rating, text, date, sentiment, urgency, replied, reply_text, google_review_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (id) DO UPDATE SET
         sentiment  = EXCLUDED.sentiment,
         urgency    = EXCLUDED.urgency,
-        replied    = EXCLUDED.replied,
-        reply_text = EXCLUDED.reply_text,
+        -- OR/COALESCE plutot qu'un simple remplacement : si on vient de
+        -- publier une reponse (auto ou manuelle), un refetch immediat
+        -- depuis Google peut ne pas encore la refleter (latence de
+        -- propagation) — ne jamais desecrire "replied" en arriere.
+        replied    = EXCLUDED.replied OR reviews.replied,
+        reply_text = COALESCE(EXCLUDED.reply_text, reviews.reply_text),
+        google_review_name = COALESCE(EXCLUDED.google_review_name, reviews.google_review_name),
         updated_at = NOW()
       RETURNING (xmax = 0) AS is_new
-    `, [rv.id, restaurantId, rv.platform, rv.author, rv.avatar, rv.rating, rv.text, rv.date, rv.sentiment, rv.urgency, rv.replied, rv.reply_text]);
+    `, [rv.id, restaurantId, rv.platform, rv.author, rv.avatar, rv.rating, rv.text, rv.date, rv.sentiment, rv.urgency, rv.replied, rv.reply_text, rv.google_review_name || null]);
     if (result.rows[0]?.is_new) newlyInserted.push(rv);
   }
   return newlyInserted;
@@ -217,17 +256,51 @@ async function saveReviewsToDB(pool, restaurantId, reviews) {
  * CRITICAL_REVIEW_ALERT_ENABLED=false. Un seul email meme si plusieurs
  * avis critiques arrivent dans le meme batch (pas un email par avis).
  */
-async function alertOnCriticalReviews(pool, restaurantId, newReviews) {
+async function alertOnCriticalReviews(pool, restaurantId, newReviews, restaurantName, restaurantEmail) {
   if (process.env.CRITICAL_REVIEW_ALERT_ENABLED === 'false') return;
   const critical = newReviews.filter(r => r.urgency === 'critical');
-  if (critical.length === 0) return;
+  if (critical.length === 0 || !restaurantEmail) return;
   try {
-    const userRes = await pool.query('SELECT email, restaurant FROM users WHERE id = $1', [restaurantId]);
-    const user = userRes.rows[0];
-    if (!user?.email) return;
-    await mailer.sendEmail({ to: user.email, ...mailer.criticalReviewAlertEmail(user.restaurant || 'votre restaurant', critical) });
+    await mailer.sendEmail({ to: restaurantEmail, ...mailer.criticalReviewAlertEmail(restaurantName, critical) });
   } catch (e) {
     console.error('[reputation] alerte avis critique echouee (non bloquant):', e.message);
+  }
+}
+
+/**
+ * Reponse automatique — zero clic staff — sur les avis Google NON
+ * critiques inedits, uniquement si ce restaurant a connecte son compte
+ * Google Business Profile (donc l'avis porte un google_review_name
+ * exploitable pour PUBLIER reellement, pas juste enregistrer cote
+ * NoveResto). Desactivable via AUTO_REPLY_GOOGLE_ENABLED=false. Les avis
+ * critiques (note <=2, mots-cles graves) ne sont JAMAIS auto-repondus —
+ * meme regle de securite que POST /reputation/reply (validation humaine
+ * obligatoire).
+ */
+async function autoReplyToNewGoogleReviews(pool, restaurantId, newReviews, restaurantName) {
+  if (process.env.AUTO_REPLY_GOOGLE_ENABLED === 'false') return;
+  const eligible = newReviews.filter(r => r.platform === 'google' && r.google_review_name && r.urgency !== 'critical' && !r.replied);
+  if (eligible.length === 0) return;
+
+  let accessToken;
+  try {
+    accessToken = await googleBusinessService.getValidAccessToken(pool, restaurantId);
+  } catch (e) {
+    return; // pas de connexion Google Business active pour ce restaurant — rien a faire
+  }
+
+  for (const review of eligible) {
+    try {
+      const replyText = await generateReply(review, { name: restaurantName });
+      await googleBusinessService.postReplyToGoogle(accessToken, review.google_review_name, replyText);
+      await pool.query(
+        'UPDATE reviews SET reply_text = $1, replied = true, auto_replied = true, updated_at = now() WHERE id = $2',
+        [replyText, review.id]
+      );
+      console.log(`[reputation] reponse auto publiee sur Google pour l'avis ${review.id}`);
+    } catch (e) {
+      console.error(`[reputation] auto-reponse Google echouee pour l'avis ${review.id} (non bloquant):`, e.message);
+    }
   }
 }
 
@@ -245,18 +318,26 @@ router.get('/', async (req, res) => {
   // (corrige le bug ou tous les restaurants voyaient les avis du meme
   // etablissement, celui configure historiquement en env sur le serveur).
   const configRes = await req.pool.query(
-    'SELECT google_place_id, facebook_page_id FROM users WHERE id = $1',
+    'SELECT google_place_id, facebook_page_id, restaurant, email FROM users WHERE id = $1',
     [restaurantId]
   )
   const config = configRes.rows[0] || {}
   const googlePlace = config.google_place_id || req.query.place_id
   const fbPage       = config.facebook_page_id || req.query.page_id
+  const restaurantName = config.restaurant || 'votre restaurant'
 
-  const useDemo = (!googleKey || !googlePlace) && (!fbToken || !fbPage)
+  const gbcRes = await req.pool.query(
+    "SELECT google_location_name FROM google_business_connections WHERE restaurant_id = $1 AND status = 'connected'",
+    [restaurantId]
+  )
+  const googleBusinessConn = gbcRes.rows[0] || null
+
+  const useDemo = (!googleKey || !googlePlace) && (!fbToken || !fbPage) && !googleBusinessConn
 
   try {
     let allReviews = []
     let sources = []
+    const liveFetchedPlatforms = new Set()
 
     if (useDemo) {
       // Mode démo — données réalistes
@@ -271,10 +352,25 @@ router.get('/', async (req, res) => {
       ]
     } else {
       // Mode production
-      if (googleKey && googlePlace) {
+      // Google : si le restaurant a connecte son Google Business Profile,
+      // on utilise CETTE api plutot que Places — seule source qui donne
+      // des avis "repondables" (google_review_name). Places reste le
+      // fallback en lecture seule pour les comptes non connectes.
+      if (googleBusinessConn) {
+        try {
+          const accessToken = await googleBusinessService.getValidAccessToken(req.pool, restaurantId)
+          const gReviews = await fetchGoogleBusinessReviews(googleBusinessConn.google_location_name, accessToken)
+          allReviews = [...allReviews, ...gReviews]
+          liveFetchedPlatforms.add('google')
+          const rated = gReviews.filter(r => r.rating)
+          const avgRating = rated.length ? Math.round((rated.reduce((s,r) => s+r.rating, 0) / rated.length) * 10) / 10 : 0
+          sources.push({ platform:'google', rating:avgRating, total:gReviews.length, status:'live_connected' })
+        } catch(e) { sources.push({ platform:'google', rating:0, total:0, status:'error', error:e.message }) }
+      } else if (googleKey && googlePlace) {
         try {
           const g = await fetchGoogleReviews(googlePlace, googleKey)
           allReviews = [...allReviews, ...g.reviews]
+          liveFetchedPlatforms.add('google')
           sources.push({ platform:'google', rating:g.rating, total:g.total, status:'live' })
         } catch(e) { sources.push({ platform:'google', rating:0, total:0, status:'error', error:e.message }) }
       }
@@ -282,22 +378,29 @@ router.get('/', async (req, res) => {
         try {
           const fb = await fetchFacebookReviews(fbPage, fbToken)
           allReviews = [...allReviews, ...fb.reviews]
+          liveFetchedPlatforms.add('facebook')
           sources.push({ platform:'facebook', rating:fb.rating, total:fb.total, status:'live' })
         } catch(e) { sources.push({ platform:'facebook', rating:0, total:0, status:'error', error:e.message }) }
       }
-      // Plateformes sans API officielle — données en DB si disponibles
+      // Plateformes sans API officielle (ou pas live cette fois-ci a
+      // cause d'une erreur ci-dessus) — completees depuis la DB. Exclut
+      // explicitement les plateformes deja live-fetchees pour ne pas
+      // dupliquer les memes avis (deja sauvegardes lors d'un GET precedent).
       const dbReviews = await req.pool?.query('SELECT * FROM reviews WHERE restaurant_id = $1 ORDER BY date DESC LIMIT 50', [restaurantId])
-      if (dbReviews?.rows?.length) allReviews = [...allReviews, ...dbReviews.rows]
+      if (dbReviews?.rows?.length) {
+        allReviews = [...allReviews, ...dbReviews.rows.filter(r => !liveFetchedPlatforms.has(r.platform))]
+      }
     }
 
-    // Sauvegarder en DB si pool disponible. Alerte email uniquement en
-    // mode production (jamais sur les avis de demo, qui reapparaitraient
-    // a chaque essai gratuit et spammeraient inutilement).
+    // Sauvegarder en DB si pool disponible. Alerte email + reponse
+    // automatique Google uniquement en mode production (jamais sur les
+    // avis de demo, qui reapparaitraient a chaque essai gratuit).
     if (req.pool && allReviews.length) {
       try {
         const newReviews = await saveReviewsToDB(req.pool, restaurantId, allReviews)
         if (!useDemo && newReviews.length) {
-          alertOnCriticalReviews(req.pool, restaurantId, newReviews).catch(() => {})
+          alertOnCriticalReviews(req.pool, restaurantId, newReviews, restaurantName, config.email).catch(() => {})
+          autoReplyToNewGoogleReviews(req.pool, restaurantId, newReviews, restaurantName).catch(() => {})
         }
       } catch(e) {}
     }
@@ -342,6 +445,39 @@ router.post('/reply', async (req, res) => {
 
   const reply = await generateReply(review, restaurant)
   res.json({ success:true, requires_validation: false, suggested_reply: reply })
+})
+
+// POST /api/v1/reputation/reviews/:reviewId/reply — enregistre la reponse
+// et, si l'avis vient de Google ET que le restaurant a connecte son
+// Google Business Profile, la PUBLIE reellement sur Google Maps. Sinon
+// (Facebook, ou Google via Places sans connexion OAuth), enregistre
+// uniquement cote NoveResto — la reponse ne sera pas visible sur la
+// plateforme publique. published_to_google dans la reponse indique
+// clairement lequel des deux cas s'est produit.
+router.post('/reviews/:reviewId/reply', async (req, res) => {
+  const { reply_text } = req.body
+  if (!reply_text || !reply_text.trim()) return res.status(400).json({ error: 'reply_text requis' })
+  const restaurantId = req.scopedRestaurantId
+  try {
+    const reviewRes = await req.pool.query('SELECT * FROM reviews WHERE id = $1 AND restaurant_id = $2', [req.params.reviewId, restaurantId])
+    const review = reviewRes.rows[0]
+    if (!review) return res.status(404).json({ error: 'Avis introuvable' })
+
+    let publishedToGoogle = false
+    if (review.platform === 'google' && review.google_review_name) {
+      const accessToken = await googleBusinessService.getValidAccessToken(req.pool, restaurantId)
+      await googleBusinessService.postReplyToGoogle(accessToken, review.google_review_name, reply_text.trim())
+      publishedToGoogle = true
+    }
+
+    await req.pool.query(
+      'UPDATE reviews SET reply_text = $1, replied = true, auto_replied = false, updated_at = now() WHERE id = $2',
+      [reply_text.trim(), req.params.reviewId]
+    )
+    res.json({ success: true, published_to_google: publishedToGoogle })
+  } catch (err) {
+    res.status(err.statusCode === 400 ? 400 : 502).json({ error: err.message })
+  }
 })
 
 async function generateReply(review, restaurant) {
